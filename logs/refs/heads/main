@@ -1,0 +1,11 @@
+0000000000000000000000000000000000000000 9677bf7c24f0b47b19893eee57c12dc5b93fef50 Topdam <39583200-Topdam@users.noreply.replit.com> 1768589395 +0000	commit (initial): Initial commit
+9677bf7c24f0b47b19893eee57c12dc5b93fef50 d7281a3b80d4223fb65fc76d4de72e6038a0492b Topdam <39583200-Topdam@users.noreply.replit.com> 1768589457 +0000	commit: Extracted stack files
+d7281a3b80d4223fb65fc76d4de72e6038a0492b 71fcbd6a6263110d4847a783e216ffc718e1e636 Topdam <39583200-Topdam@users.noreply.replit.com> 1768590544 +0000	commit: Add comprehensive body energy profile generation and display features
+71fcbd6a6263110d4847a783e216ffc718e1e636 8eb098e4e24edabfbe80639fc174ea4110d6de2f Topdam <39583200-Topdam@users.noreply.replit.com> 1768590602 +0000	commit: Saved progress at the end of the loop
+8eb098e4e24edabfbe80639fc174ea4110d6de2f 6afa0f64f385e10d2fe060ea2da0cfd67c7677f8 Topdam <39583200-Topdam@users.noreply.replit.com> 1768592559 +0000	commit: Integrate Vedic astrology calculations for personalized profiles
+6afa0f64f385e10d2fe060ea2da0cfd67c7677f8 f8870caedc9aa2211a0053b5532d6c70c295ed1b Topdam <39583200-Topdam@users.noreply.replit.com> 1768592844 +0000	commit: Update application to use Jyotish-based calculations for user profiles
+f8870caedc9aa2211a0053b5532d6c70c295ed1b 56bbbb36769e942692d82a1e441db0b340d4b3e5 Topdam <39583200-Topdam@users.noreply.replit.com> 1768596938 +0000	commit: Add dual zodiac mode support and improve timezone handling
+56bbbb36769e942692d82a1e441db0b340d4b3e5 690746a272954117856ac55dd0b5b6efc1201118 Topdam <39583200-Topdam@users.noreply.replit.com> 1768599012 +0000	commit: Improve PDF export functionality to include selected chart types
+690746a272954117856ac55dd0b5b6efc1201118 a67753419d7e4b5a98911f461aebf4da0ed9c7b3 Topdam <39583200-Topdam@users.noreply.replit.com> 1768599057 +0000	commit: Add horoscope chart visualization and update PDF export functionality
+a67753419d7e4b5a98911f461aebf4da0ed9c7b3 8fc04a08ea578146e29732277331e2b0ee14031b Topdam <39583200-Topdam@users.noreply.replit.com> 1768862916 +0000	commit: Add detailed chakra profile information to user results
+8fc04a08ea578146e29732277331e2b0ee14031b ffb00e591ad79c113551df62095ed63b0ccbc77b Topdam <39583200-Topdam@users.noreply.replit.com> 1768862946 +0000	commit: Update application to make chakra profile the primary output
