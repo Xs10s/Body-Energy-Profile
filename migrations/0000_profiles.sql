@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS "profiles" (
+  "id" text PRIMARY KEY NOT NULL,
+  "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+  "name" text,
+  "birth_date" text NOT NULL,
+  "birth_time" text,
+  "birth_place" text NOT NULL,
+  "country" text NOT NULL,
+  "timezone" text NOT NULL,
+  "latitude" double precision,
+  "longitude" double precision,
+  "place_id" text,
+  "time_unknown" boolean DEFAULT false NOT NULL,
+  "zodiac_mode" text NOT NULL,
+  "moon_sign" text,
+  "moon_nakshatra" text,
+  "sun_sign" text,
+  "lagna_sign" text,
+  "ayanamsa" double precision,
+  "profile" jsonb NOT NULL
+);

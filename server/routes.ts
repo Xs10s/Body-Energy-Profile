@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
+import { getStorageInfo, storage } from "./storage";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import { saveProfileRequestSchema, DOMAIN_LABELS, geocodeResultSchema } from "@shared/schema";
@@ -69,6 +69,13 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.get("/api/health", (_req, res) => {
+    res.json({
+      status: "ok",
+      storage: getStorageInfo().kind
+    });
+  });
+
   app.get("/api/geocode", async (req, res) => {
     try {
       const place = req.query.place as string;
