@@ -74,6 +74,8 @@ describe("computeTropicalChakraScores", () => {
       for (const signal of signals) {
         expect(signal.tags).toBeDefined();
         expect(signal.tags.some((tag) => tag.startsWith("nakshatra:"))).toBe(false);
+        expect(signal.factor.toLowerCase()).not.toContain("nakshatra");
+        expect(signal.reason.toLowerCase()).not.toContain("nakshatra");
       }
     }
   });
