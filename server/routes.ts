@@ -4,6 +4,7 @@ import { getStorageInfo, storage } from "./storage";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
 import { saveProfileRequestSchema, DOMAIN_LABELS, geocodeResultSchema } from "@shared/schema";
+import { getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
 import type { BodyProfile, GeocodeResult } from "@shared/schema";
 
 async function svgToPng(svgString: string, width: number = 300): Promise<Buffer | null> {
@@ -69,6 +70,19 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const normalizeProfileView = (profile: BodyProfile): BodyProfile => {
+    const view = profile.view ?? normalizeAstroView(profile.input);
+    return {
+      ...profile,
+      view,
+      viewLabelNL: profile.viewLabelNL ?? getViewLabelNL(view),
+      input: {
+        ...profile.input,
+        zodiacMode: view
+      }
+    };
+  };
+
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
@@ -101,7 +115,11 @@ export async function registerRoutes(
   app.get("/api/profiles", async (_req, res) => {
     try {
       const profiles = await storage.getProfiles();
-      res.json(profiles);
+      const normalized = profiles.map((saved) => ({
+        ...saved,
+        profile: normalizeProfileView(saved.profile)
+      }));
+      res.json(normalized);
     } catch (error) {
       console.error("Error fetching profiles:", error);
       res.status(500).json({ error: "Failed to fetch profiles" });
@@ -114,7 +132,10 @@ export async function registerRoutes(
       if (!profile) {
         return res.status(404).json({ error: "Profile not found" });
       }
-      res.json(profile);
+      res.json({
+        ...profile,
+        profile: normalizeProfileView(profile.profile)
+      });
     } catch (error) {
       console.error("Error fetching profile:", error);
       res.status(500).json({ error: "Failed to fetch profile" });
@@ -131,7 +152,8 @@ export async function registerRoutes(
         });
       }
       const { profile } = parseResult.data;
-      const savedProfile = await storage.saveProfile(profile as BodyProfile);
+      const normalizedProfile = normalizeProfileView(profile as BodyProfile);
+      const savedProfile = await storage.saveProfile(normalizedProfile);
       res.status(201).json(savedProfile);
     } catch (error) {
       console.error("Error saving profile:", error);
@@ -162,6 +184,7 @@ export async function registerRoutes(
         });
       }
       const { profile } = parseResult.data as { profile: BodyProfile };
+      const normalizedProfile = normalizeProfileView(profile);
       const chartSVG = req.body.chartSVG as string | undefined;
 
       let chartPng: Buffer | null = null;
@@ -171,14 +194,15 @@ export async function registerRoutes(
 
       const doc = new PDFDocument({ margin: 50 });
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="body-energy-profile.pdf"`);
+      const viewSuffix = normalizedProfile.view === "tropical" ? "westers" : "oosters";
+      res.setHeader("Content-Disposition", `attachment; filename="body-energy-profile-${viewSuffix}.pdf"`);
       doc.pipe(res);
 
       doc.fontSize(24).text("Body Energy Profile", { align: "center" });
       doc.moveDown();
 
-      if (profile.input.name) {
-        doc.fontSize(16).text(profile.input.name, { align: "center" });
+      if (normalizedProfile.input.name) {
+        doc.fontSize(16).text(normalizedProfile.input.name, { align: "center" });
         doc.moveDown();
       }
 
@@ -191,26 +215,36 @@ export async function registerRoutes(
       }
 
       doc.fontSize(12);
-      doc.text(`Geboortedatum: ${new Date(profile.input.birthDate).toLocaleDateString("nl-NL")}`);
-      doc.text(`Geboorteplaats: ${profile.input.birthPlace}, ${profile.input.country}`);
-      
-      doc.text(`Maan teken: ${profile.derived.moonSign}`);
-      doc.text(`Nakshatra: ${profile.derived.moonNakshatra} (pada ${profile.derived.moonPada})`);
-      doc.text(`Zon teken: ${profile.derived.sunSign}`);
-      if (profile.derived.lagnaSign) {
-        doc.text(`Ascendant (Lagna): ${profile.derived.lagnaSign}`);
-      }
-      if (profile.derived.ayanamsa != null) {
-        doc.text(`Ayanamsa: Lahiri (${profile.derived.ayanamsa.toFixed(2)}°)`);
+      doc.text(`Kijkwijze: ${normalizedProfile.viewLabelNL}`);
+      doc.text(`Geboortedatum: ${new Date(normalizedProfile.input.birthDate).toLocaleDateString("nl-NL")}`);
+      doc.text(`Geboorteplaats: ${normalizedProfile.input.birthPlace}, ${normalizedProfile.input.country}`);
+      doc.text(`Tijdzone: ${normalizedProfile.input.timezone}`);
+      if (normalizedProfile.input.latitude != null && normalizedProfile.input.longitude != null) {
+        doc.text(`Coördinaten: ${normalizedProfile.input.latitude}, ${normalizedProfile.input.longitude}`);
       }
       
-      if (profile.input.birthTime && !profile.input.timeUnknown) {
-        doc.text(`Geboortetijd: ${profile.input.birthTime}`);
+      doc.text(`Maan teken: ${normalizedProfile.derived.moonSign}`);
+      if (normalizedProfile.view === "sidereal") {
+        doc.text(`Nakshatra: ${normalizedProfile.derived.moonNakshatra} (pada ${normalizedProfile.derived.moonPada})`);
       }
-      doc.text(`Betrouwbaarheid: ${profile.confidence.level === "high" ? "Hoog" : "Gemiddeld"}`);
+      doc.text(`Zon teken: ${normalizedProfile.derived.sunSign}`);
+      if (normalizedProfile.derived.lagnaSign) {
+        doc.text(`Ascendant (Lagna): ${normalizedProfile.derived.lagnaSign}`);
+      }
+      if (normalizedProfile.derived.ayanamsa != null) {
+        doc.text(`Ayanamsa: Lahiri (${normalizedProfile.derived.ayanamsa.toFixed(2)}°)`);
+      }
+      if (normalizedProfile.chartData?.housesSystem) {
+        doc.text(`Huizensysteem: ${normalizedProfile.chartData.housesSystem}`);
+      }
+      
+      if (normalizedProfile.input.birthTime && !normalizedProfile.input.timeUnknown) {
+        doc.text(`Geboortetijd: ${normalizedProfile.input.birthTime}`);
+      }
+      doc.text(`Betrouwbaarheid: ${normalizedProfile.confidence.level === "high" ? "Hoog" : "Gemiddeld"}`);
       doc.moveDown(2);
 
-      if (profile.chakraProfiles && profile.chakraProfiles.length > 0) {
+      if (normalizedProfile.chakraProfiles && normalizedProfile.chakraProfiles.length > 0) {
         doc.fontSize(18).text("Chakra-profiel op basis van horoscoop", { underline: true });
         doc.moveDown();
         
@@ -224,7 +258,7 @@ export async function registerRoutes(
           crown: 'Kruin (Sahasrara)'
         };
         
-        for (const chakra of profile.chakraProfiles) {
+        for (const chakra of normalizedProfile.chakraProfiles) {
           doc.fontSize(12).text(CHAKRA_LABELS[chakra.domain] || chakra.labelNL, { underline: true });
           doc.fontSize(10);
           doc.text(`Score: ${chakra.score}${chakra.timeSensitive ? ' (tijdgevoelig)' : ''}`);
@@ -265,7 +299,7 @@ export async function registerRoutes(
       doc.moveDown();
       doc.fontSize(10);
       
-      for (const [domain, score] of Object.entries(profile.domainScores)) {
+      for (const [domain, score] of Object.entries(normalizedProfile.domainScores)) {
         const label = DOMAIN_LABELS[domain as keyof typeof DOMAIN_LABELS];
         const scoreInfo = score.spread > 0 
           ? `${score.value} (bereik: ${score.min}-${score.max})` 
@@ -286,7 +320,7 @@ export async function registerRoutes(
       ];
 
       for (const { key, title } of sections) {
-        const section = profile.sections[key as keyof typeof profile.sections];
+        const section = normalizedProfile.sections[key as keyof typeof normalizedProfile.sections];
         
         doc.fontSize(14).text(title, { underline: true });
         doc.moveDown(0.5);
@@ -306,10 +340,10 @@ export async function registerRoutes(
       doc.fontSize(12).text("Disclaimer", { underline: true });
       doc.moveDown(0.5);
       doc.fontSize(9);
-      doc.text(profile.disclaimer.text);
+      doc.text(normalizedProfile.disclaimer.text);
       doc.moveDown(0.5);
       doc.text("Wanneer een professional raadplegen:");
-      for (const item of profile.disclaimer.whenToConsult) {
+      for (const item of normalizedProfile.disclaimer.whenToConsult) {
         doc.text(`• ${item}`, { indent: 10 });
       }
 

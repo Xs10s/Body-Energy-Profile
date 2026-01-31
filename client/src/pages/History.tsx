@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
 import type { SavedProfile } from "@shared/schema";
 
 export default function History() {
@@ -38,7 +39,10 @@ export default function History() {
   });
 
   const handleView = (profile: SavedProfile) => {
-    localStorage.setItem("profileInput", JSON.stringify(profile.profile.input));
+    const view = profile.profile.view ?? normalizeAstroView(profile.profile.input);
+    const inputWithView = { ...profile.profile.input, zodiacMode: view };
+    localStorage.setItem("profileInput", JSON.stringify(inputWithView));
+    localStorage.setItem("astroView", view);
     setLocation("/result");
   };
 
@@ -120,6 +124,9 @@ export default function History() {
                         data-testid={`badge-confidence-${saved.id}`}
                       >
                         {saved.profile.confidence.level === "high" ? "Hoge" : "Gemiddelde"} betrouwbaarheid
+                      </Badge>
+                      <Badge variant="outline" data-testid={`badge-view-${saved.id}`}>
+                        {saved.profile.viewLabelNL || getViewLabelNL(saved.profile.view ?? normalizeAstroView(saved.profile.input))}
                       </Badge>
                     </CardDescription>
                   </div>

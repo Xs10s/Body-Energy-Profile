@@ -1,3 +1,6 @@
+// Implements the fixed Tropical Chakra Scoring point table.
+// MUST NOT emit nakshatra tags.
+
 import type {
   TropicalChartFeatures,
   PlanetKey,

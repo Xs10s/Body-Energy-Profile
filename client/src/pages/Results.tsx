@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Download, Save, ArrowLeft, Loader2 } from "lucide-react";
@@ -16,13 +16,15 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BodyProfile, ProfileInput, Domain } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
-import { generateProfile } from "@shared/scoring";
+import { generateProfileByView, getViewLabelNL, normalizeAstroView, type AstroView } from "@shared/profileBuilder";
 
 export default function Results() {
   const [, setLocation] = useLocation();
   const [profile, setProfile] = useState<BodyProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [chartType, setChartType] = useState<ChartType>('diamond');
+  const [astroView, setAstroView] = useState<AstroView>("sidereal");
+  const [profileInput, setProfileInput] = useState<ProfileInput | null>(null);
   const { toast } = useToast();
 
   const saveProfileMutation = useMutation({
@@ -59,7 +61,8 @@ export default function Results() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `body-energy-profile-${profile?.input.name || "profiel"}.pdf`;
+      const viewSuffix = profile?.view === "tropical" ? "westers" : "oosters";
+      a.download = `body-energy-profile-${viewSuffix}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -87,7 +90,13 @@ export default function Results() {
 
     try {
       const input: ProfileInput = JSON.parse(stored);
-      const generatedProfile = generateProfile(input);
+      const view = normalizeAstroView(input);
+      const normalizedInput = { ...input, zodiacMode: view };
+      const generatedProfile = generateProfileByView(normalizedInput, view);
+      localStorage.setItem("astroView", view);
+      setProfileInput(normalizedInput);
+      setAstroView(view);
+      setChartType(view === "tropical" ? "wheel" : "diamond");
       setProfile(generatedProfile);
     } catch (error) {
       console.error("Error generating profile:", error);
@@ -114,6 +123,19 @@ export default function Results() {
       downloadPDFMutation.mutate({ profile, chartSVG });
     }
   };
+
+  const handleViewChange = (nextView: AstroView) => {
+    if (!profileInput) return;
+    const updatedInput = { ...profileInput, zodiacMode: nextView };
+    localStorage.setItem("profileInput", JSON.stringify(updatedInput));
+    localStorage.setItem("astroView", nextView);
+    setProfileInput(updatedInput);
+    setAstroView(nextView);
+    setChartType(nextView === "tropical" ? "wheel" : "diamond");
+    setProfile(generateProfileByView(updatedInput, nextView));
+  };
+
+  const viewLabel = useMemo(() => getViewLabelNL(astroView), [astroView]);
 
   if (isLoading) {
     return (
@@ -175,6 +197,37 @@ export default function Results() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+        <section className="flex flex-col gap-3" data-testid="section-astro-view-toggle">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Astrologische kijkwijze</span>
+            <span className="text-sm font-medium" data-testid="text-active-view">
+              {viewLabel}
+            </span>
+          </div>
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            <Button
+              type="button"
+              variant={astroView === "sidereal" ? "default" : "ghost"}
+              className="rounded-none"
+              aria-pressed={astroView === "sidereal"}
+              onClick={() => handleViewChange("sidereal")}
+              data-testid="button-view-sidereal"
+            >
+              Oosters
+            </Button>
+            <Button
+              type="button"
+              variant={astroView === "tropical" ? "default" : "ghost"}
+              className="rounded-none"
+              aria-pressed={astroView === "tropical"}
+              onClick={() => handleViewChange("tropical")}
+              data-testid="button-view-tropical"
+            >
+              Westers
+            </Button>
+          </div>
+        </section>
+
         <SummaryHeader profile={profile} />
 
         <ChakraProfileSection 
@@ -186,6 +239,7 @@ export default function Results() {
           profile={profile} 
           chartType={chartType}
           onChartTypeChange={setChartType}
+          lockChartType
         />
 
         <section>
@@ -218,6 +272,33 @@ export default function Results() {
         <MethodologyAccordion methodology={profile.methodology} />
 
         <DebugPanel debugInfo={profile.debugInfo} />
+
+        {import.meta.env.DEV && (
+          <section className="border rounded-lg p-4 bg-muted/40" data-testid="dev-astro-view-debug">
+            <h3 className="text-sm font-semibold mb-2">Dev-check: kijkwijze & tags</h3>
+            <p className="text-xs text-muted-foreground">
+              Actieve kijkwijze: <span className="font-medium">{viewLabel}</span>
+            </p>
+            <div className="mt-3 space-y-2 text-xs">
+              {profile.chakraProfiles.map((chakra) => {
+                const tags = Array.from(
+                  new Set(chakra.signals.flatMap((signal) => signal.tags || []))
+                );
+                const topTags = tags.slice(0, 3);
+                const hasNakshatra = tags.some((tag) => tag.startsWith("nakshatra:"));
+                return (
+                  <div key={chakra.domain} className="flex flex-wrap gap-2">
+                    <span className="font-medium">{chakra.labelNL}:</span>
+                    <span>Tags: {topTags.join(", ") || "geen"}</span>
+                    <span className={hasNakshatra ? "text-amber-600" : "text-emerald-600"}>
+                      Nakshatra: {hasNakshatra ? "ja" : "nee"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <DisclaimerBox disclaimer={profile.disclaimer} />
       </main>
