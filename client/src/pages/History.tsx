@@ -153,7 +153,7 @@ export default function History() {
                     <span className="mx-2">•</span>
                     <span>{saved.profile.input.birthPlace}, {saved.profile.input.country}</span>
                     <span className="mx-2">•</span>
-                    <span>Levenspad: {saved.profile.derived.lifePath}</span>
+                    <span>Maan teken: {saved.profile.derived.moonSign}</span>
                   </div>
                 </CardContent>
               </Card>

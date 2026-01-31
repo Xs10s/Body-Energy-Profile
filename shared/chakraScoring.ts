@@ -15,6 +15,7 @@ export interface ChakraSignal {
   influence: 'supportive' | 'challenging' | 'neutral';
   weight: number;
   reason: string;
+  tags: string[];
 }
 
 export interface ChakraProfile {
@@ -132,7 +133,8 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
           factor: `${getPlanetNL(planet)} in ${signNL}`,
           influence,
           weight: Math.abs(contribution),
-          reason: `${getPlanetNL(planet)} ${reasonDetail}`
+          reason: `${getPlanetNL(planet)} ${reasonDetail}`,
+          tags: [`source:planet`, `planet:${planet}`, `domain:${domain}`]
         });
       }
     }
@@ -150,7 +152,13 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
             factor: `${getPlanetNL(planet)} in huis ${data.houseWholeSign}`,
             influence: houseContribution > 0 ? 'supportive' : 'challenging',
             weight: Math.abs(houseContribution),
-            reason: `versterkt door positie in huis ${data.houseWholeSign}`
+            reason: `versterkt door positie in huis ${data.houseWholeSign}`,
+            tags: [
+              `source:house`,
+              `planet:${planet}`,
+              `house:${data.houseWholeSign}`,
+              `domain:${domain}`
+            ]
           });
         }
       }
@@ -167,7 +175,8 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
         factor: `Maan in ${getSignNL(moonSign)} (${moonElement === 'fire' ? 'vuur' : moonElement === 'earth' ? 'aarde' : moonElement === 'air' ? 'lucht' : 'water'})`,
         influence: moonElementEffect > 0 ? 'supportive' : 'challenging',
         weight: Math.abs(moonElementEffect),
-        reason: `${moonElement === 'fire' ? 'vuur' : moonElement === 'earth' ? 'aarde' : moonElement === 'air' ? 'lucht' : 'water'}-element van Maan`
+        reason: `${moonElement === 'fire' ? 'vuur' : moonElement === 'earth' ? 'aarde' : moonElement === 'air' ? 'lucht' : 'water'}-element van Maan`,
+        tags: [`source:element`, `element:${moonElement}`, `domain:${domain}`]
       });
     }
 
@@ -182,7 +191,8 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
         factor: `Zon in ${getSignNL(sunSign)} (${sunElement === 'fire' ? 'vuur' : sunElement === 'earth' ? 'aarde' : sunElement === 'air' ? 'lucht' : 'water'})`,
         influence: sunElementEffect > 0 ? 'supportive' : 'challenging',
         weight: Math.abs(sunElementEffect),
-        reason: `${sunElement === 'fire' ? 'vuur' : sunElement === 'earth' ? 'aarde' : sunElement === 'air' ? 'lucht' : 'water'}-element van Zon`
+        reason: `${sunElement === 'fire' ? 'vuur' : sunElement === 'earth' ? 'aarde' : sunElement === 'air' ? 'lucht' : 'water'}-element van Zon`,
+        tags: [`source:element`, `element:${sunElement}`, `domain:${domain}`]
       });
     }
 
@@ -199,7 +209,8 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
           factor: `Ascendant in ${lagnaSignNL} (${lagnaElement === 'fire' ? 'vuur' : lagnaElement === 'earth' ? 'aarde' : lagnaElement === 'air' ? 'lucht' : 'water'})`,
           influence: lagnaElementEffect > 0 ? 'supportive' : 'challenging',
           weight: Math.abs(lagnaElementEffect),
-          reason: `Lagna-element beïnvloedt ${DOMAIN_LABELS[domain]}`
+          reason: `Lagna-element beïnvloedt ${DOMAIN_LABELS[domain]}`,
+          tags: [`source:lagna`, `element:${lagnaElement}`, `domain:${domain}`]
         });
       }
     }
@@ -214,7 +225,8 @@ export function computeChakraEvidence(chart: ChartData): Record<Domain, ChakraEv
           factor: `Maan in ${nakshatra}`,
           influence: 'supportive',
           weight: 3,
-          reason: `spirituele nakshatra versterkt hoger bewustzijn`
+          reason: `spirituele nakshatra versterkt hoger bewustzijn`,
+          tags: [`source:nakshatra`, `nakshatra:${nakshatra}`, `domain:${domain}`]
         });
       }
     }
