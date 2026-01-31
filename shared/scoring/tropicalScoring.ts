@@ -1,6 +1,3 @@
-// Implements the fixed Tropical Chakra Scoring point table.
-// MUST NOT emit nakshatra tags.
-
 import type {
   TropicalChartFeatures,
   PlanetKey,
@@ -120,6 +117,11 @@ const HARD: Record<AspectType, number> = {
 const BENEFIC = new Set<PlanetKey>(["Venus", "Jupiter"]);
 const MALEFIC = new Set<PlanetKey>(["Mars", "Saturn", "Pluto"]);
 
+const CATEGORIES = ["planet", "house", "aspect", "element", "modality", "dignity", "stress"] as const;
+type RefCategory = (typeof CATEGORIES)[number];
+
+const ROUTES: Record<Domain, (a: PlanetKey, b: PlanetKey) => boolean> = {
+  root: (a, b) => includesPair([a, b], "Saturn", ["Moon", "Sun", "Mars"]),
 const ROUTES: Record<Domain, (a: PlanetKey, b: PlanetKey) => boolean> = {
   root: (a, b) =>
     includesPair([a, b], "Saturn", ["Moon", "Sun", "Mars"]) ||
@@ -147,6 +149,7 @@ export function computeTropicalChakraScores(features: TropicalChartFeatures): Tr
     let score = 50;
 
     score += applyElementPoints(domain, features, signals);
+    applyModalitySignals(domain, features, signals);
     score += applyHousePoints(domain, features, signals);
     score += applyPlanetStrengthPoints(domain, features, signals);
     score += applyAspectPoints(domain, features, signals);
@@ -189,6 +192,9 @@ function applyElementPoints(domain: Domain, f: TropicalChartFeatures, signals: C
         weight: Math.abs(pts.dominant),
         source: "element",
         factor: `Element ${el} dominant`,
+        reason: `Element ${el} is sterk aanwezig (${Math.round(pct * 100)}%).`,
+        tags: [`element:${el}`],
+        category: "element"
         reason: `Element ${el} is sterk aanwezig (${Math.round(pct * 100)}%).`
       }));
     } else if (pct <= ELEMENT_DEFICIENT) {
@@ -198,11 +204,32 @@ function applyElementPoints(domain: Domain, f: TropicalChartFeatures, signals: C
         weight: Math.abs(pts.deficient),
         source: "element",
         factor: `Element ${el} laag`,
+        reason: `Element ${el} is relatief laag (${Math.round(pct * 100)}%).`,
+        tags: [`element:${el}`],
+        category: "element"
         reason: `Element ${el} is relatief laag (${Math.round(pct * 100)}%).`
       }));
     }
   }
   return delta;
+}
+
+function applyModalitySignals(domain: Domain, f: TropicalChartFeatures, signals: ChakraSignal[]) {
+  const entries = Object.entries(f.modalityPct) as Array<[string, number]>;
+  for (const [modality, pct] of entries) {
+    if (pct < 0.2 || pct >= 0.34) {
+      const influence = pct >= 0.34 ? "supportive" : "challenging";
+      signals.push(makeSignal({
+        influence,
+        weight: 2,
+        source: "modality",
+        factor: `Modality ${modality}`,
+        reason: `Modality ${modality} is ${pct >= 0.34 ? "dominant" : "laag"} (${Math.round(pct * 100)}%).`,
+        tags: [`modality:${modality}`],
+        category: "modality"
+      }));
+    }
+  }
 }
 
 function applyHousePoints(domain: Domain, f: TropicalChartFeatures, signals: ChakraSignal[]): number {
@@ -220,6 +247,9 @@ function applyHousePoints(domain: Domain, f: TropicalChartFeatures, signals: Cha
       weight: Math.abs(row.points),
       source: "house",
       factor: `Huis ${h} nadruk`,
+      reason: `Huis ${h} heeft relatief veel planetaire nadruk (weight=${(f.houseWeights[h] ?? 0).toFixed(1)}).`,
+      tags: [`house:${h}`],
+      category: "house"
       reason: `Huis ${h} heeft relatief veel planetaire nadruk (weight=${(f.houseWeights[h] ?? 0).toFixed(1)}).`
     }));
   }
@@ -251,6 +281,9 @@ function applyPlanetStrengthPoints(domain: Domain, f: TropicalChartFeatures, sig
       weight: Math.abs(p),
       source: "planet",
       factor: `${planet} sterkte`,
+      reason: `Dignity: ${dignity}${isAngular(pos.house) ? ", angular" : ""}${pos.retrograde ? ", retrograde" : ""}.`,
+      tags: [`planet:${planet}`, `dignity:${dignity}`],
+      category: "dignity"
       reason: `Dignity: ${dignity}${isAngular(pos.house) ? ", angular" : ""}${pos.retrograde ? ", retrograde" : ""}.`
     }));
   }
@@ -278,6 +311,9 @@ function applyAspectPoints(domain: Domain, f: TropicalChartFeatures, signals: Ch
       weight: Math.abs(pts),
       source: "aspect",
       factor: `${a.a} ${a.type} ${a.b}`,
+      reason: `Aspect ${a.type} met orb ${a.orbDeg.toFixed(1)}° (mult ${mult}).`,
+      tags: [`aspect:${a.a}_${a.type}_${a.b}`],
+      category: "aspect"
       reason: `Aspect ${a.type} met orb ${a.orbDeg.toFixed(1)}° (mult ${mult}).`
     }));
   }
@@ -318,6 +354,9 @@ function applyStressMod(domain: Domain, f: TropicalChartFeatures, signals: Chakr
       weight: Math.abs(pts),
       source: "stress",
       factor: "Stress-index modulatie",
+      reason: `Stress-index ${Math.round(s * 100)}% beïnvloedt dit domein.`,
+      tags: ["stress:index"],
+      category: "stress"
       reason: `Stress-index ${Math.round(s * 100)}% beïnvloedt dit domein.`
     }));
   }
@@ -328,6 +367,9 @@ function applyStressMod(domain: Domain, f: TropicalChartFeatures, signals: Chakr
       weight: 3,
       source: "stress",
       factor: "Overdrive-signaal",
+      reason: "Hoge stress-index kan drive verhogen maar ook druk/overdrive veroorzaken.",
+      tags: ["stress:overdrive"],
+      category: "stress"
       reason: "Hoge stress-index kan drive verhogen maar ook druk/overdrive veroorzaken."
     }));
   }
@@ -337,6 +379,78 @@ function applyStressMod(domain: Domain, f: TropicalChartFeatures, signals: Chakr
 
 function enforceEvidenceConstraints(signals: ChakraSignal[]): ChakraSignal[] {
   const filtered = signals.filter(
+    (signal) => !signal.tags.some((tag) => tag.startsWith("nakshatra:"))
+  );
+
+  const byCategory = new Map<RefCategory, ChakraSignal[]>();
+  for (const signal of filtered) {
+    const category = getCategory(signal);
+    const list = byCategory.get(category) ?? [];
+    list.push(signal);
+    byCategory.set(category, list);
+  }
+
+  for (const list of byCategory.values()) {
+    list.sort((a, b) => b.weight - a.weight || a.factor.localeCompare(b.factor));
+  }
+
+  const picked: ChakraSignal[] = [];
+  const orderedCategories = Array.from(byCategory.keys()).sort();
+  for (const category of orderedCategories.slice(0, 2)) {
+    const top = byCategory.get(category)?.[0];
+    if (top) picked.push(top);
+  }
+
+  const rest = filtered
+    .filter((signal) => !picked.includes(signal))
+    .sort((a, b) => b.weight - a.weight || a.factor.localeCompare(b.factor));
+
+  const target = Math.min(10, Math.max(6, picked.length + 4));
+  for (const signal of rest) {
+    if (picked.length >= target) break;
+    picked.push(signal);
+  }
+
+  const supportive = picked.filter((signal) => signal.influence === "supportive");
+  const challenging = picked.filter((signal) => signal.influence === "challenging");
+
+  if (supportive.length < 3) {
+    const add = rest.filter((signal) => signal.influence === "supportive" && !picked.includes(signal));
+    picked.push(...add.slice(0, 3 - supportive.length));
+  }
+  if (challenging.length < 3) {
+    const add = rest.filter((signal) => signal.influence === "challenging" && !picked.includes(signal));
+    picked.push(...add.slice(0, 3 - challenging.length));
+  }
+
+  return picked
+    .slice(0, 10)
+    .sort((a, b) => b.weight - a.weight || a.factor.localeCompare(b.factor));
+}
+
+function getCategory(signal: ChakraSignal): RefCategory {
+  for (const category of CATEGORIES) {
+    if (signal.tags.includes(`category:${category}`)) {
+      return category;
+    }
+  }
+  switch (signal.source) {
+    case "house":
+      return "house";
+    case "aspect":
+      return "aspect";
+    case "element":
+      return "element";
+    case "modality":
+      return "modality";
+    case "stress":
+      return "stress";
+    case "planet":
+    case "dignity":
+      return "dignity";
+    default:
+      return "planet";
+  }
     (signal) =>
       !signal.factor.toLowerCase().includes("nakshatra") &&
       !signal.reason.toLowerCase().includes("nakshatra")
@@ -354,12 +468,16 @@ function makeSignal(args: {
   source: ChakraSignal["source"];
   factor: string;
   reason: string;
+  tags: string[];
+  category: RefCategory;
 }): ChakraSignal {
   return {
     source: args.source,
     factor: args.factor,
     reason: args.reason,
     influence: args.influence,
+    weight: args.weight,
+    tags: [...args.tags, `category:${args.category}`]
     weight: args.weight
   };
 }

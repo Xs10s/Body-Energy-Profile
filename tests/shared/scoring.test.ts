@@ -32,4 +32,15 @@ describe("generateProfile", () => {
     const spreads = Object.values(profile.domainScores).map((score) => score.spread);
     expect(spreads.some((spread) => spread > 0)).toBe(true);
   });
+
+  it("includes nakshatra tags in sidereal signals", () => {
+    const profile = generateProfile(baseInput);
+    const hasNakshatraTag = profile.chakraProfiles.some((chakra) =>
+      chakra.signals.some((signal) =>
+        signal.tags.some((tag) => tag.startsWith("nakshatra:"))
+      )
+    );
+
+    expect(hasNakshatraTag).toBe(true);
+  });
 });

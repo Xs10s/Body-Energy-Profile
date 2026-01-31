@@ -72,6 +72,8 @@ describe("computeTropicalChakraScores", () => {
     for (const domain of Object.keys(scores) as Array<keyof typeof scores>) {
       const signals = scores[domain].evidence.signals;
       for (const signal of signals) {
+        expect(signal.tags).toBeDefined();
+        expect(signal.tags.some((tag) => tag.startsWith("nakshatra:"))).toBe(false);
         expect(signal.factor.toLowerCase()).not.toContain("nakshatra");
         expect(signal.reason.toLowerCase()).not.toContain("nakshatra");
       }
