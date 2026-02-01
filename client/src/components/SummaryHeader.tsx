@@ -75,8 +75,13 @@ export function SummaryHeader({ profile }: SummaryHeaderProps) {
                 </div>
               )}
 
-              <div className="flex items-center gap-3 text-sm" data-testid="info-zodiac-mode">
+              <div className="flex items-center gap-3 text-sm flex-wrap" data-testid="info-zodiac-mode">
                 <Sparkles className="h-4 w-4 text-muted-foreground" />
+                {profile.viewLabelNL && (
+                  <Badge variant="secondary" data-testid="badge-astro-view">
+                    {profile.viewLabelNL}
+                  </Badge>
+                )}
                 <Badge variant={derived.zodiacMode === 'sidereal' ? 'default' : 'outline'} data-testid="badge-zodiac-mode">
                   {ZODIAC_MODE_LABELS[derived.zodiacMode]}
                 </Badge>

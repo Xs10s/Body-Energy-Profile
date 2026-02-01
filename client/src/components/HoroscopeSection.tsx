@@ -16,9 +16,10 @@ interface HoroscopeSectionProps {
   profile: BodyProfile;
   chartType: ChartType;
   onChartTypeChange: (type: ChartType) => void;
+  lockChartType?: boolean;
 }
 
-export function HoroscopeSection({ profile, chartType, onChartTypeChange }: HoroscopeSectionProps) {
+export function HoroscopeSection({ profile, chartType, onChartTypeChange, lockChartType = false }: HoroscopeSectionProps) {
   const [showLegend, setShowLegend] = useState(false);
   const [showHouseNumbers, setShowHouseNumbers] = useState(false);
 
@@ -63,31 +64,33 @@ export function HoroscopeSection({ profile, chartType, onChartTypeChange }: Horo
       </CardHeader>
       
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Kaarttype:</span>
-            <Select value={chartType} onValueChange={(v) => onChartTypeChange(v as ChartType)}>
-              <SelectTrigger className="w-40" data-testid="select-chart-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="diamond">Jyotish (diamant)</SelectItem>
-                <SelectItem value="wheel">Wiel (cirkel)</SelectItem>
-              </SelectContent>
-            </Select>
+        {!lockChartType && (
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Kaarttype:</span>
+              <Select value={chartType} onValueChange={(v) => onChartTypeChange(v as ChartType)}>
+                <SelectTrigger className="w-40" data-testid="select-chart-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="diamond">Jyotish (diamant)</SelectItem>
+                  <SelectItem value="wheel">Wiel (cirkel)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {chartType === 'diamond' && (
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowHouseNumbers(!showHouseNumbers)}
+                data-testid="button-toggle-house-numbers"
+              >
+                {showHouseNumbers ? 'Huisnummers verbergen' : 'Huisnummers tonen'}
+              </Button>
+            )}
           </div>
-          
-          {chartType === 'diamond' && (
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setShowHouseNumbers(!showHouseNumbers)}
-              data-testid="button-toggle-house-numbers"
-            >
-              {showHouseNumbers ? 'Huisnummers verbergen' : 'Huisnummers tonen'}
-            </Button>
-          )}
-        </div>
+        )}
 
         <div className="flex justify-center py-4" data-testid="chart-container">
           {chartType === 'diamond' ? (
