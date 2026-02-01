@@ -167,7 +167,8 @@
 
 @layer base {
   * {
-    @apply border-border;
+    /* Use CSS variable directly to avoid Tailwind applying issues */
+    border-color: hsl(var(--border) / 1);
   }
 
   body {
