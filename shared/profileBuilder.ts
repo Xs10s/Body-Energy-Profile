@@ -77,49 +77,6 @@ export function generateProfileByView(input: ProfileInput, view: AstroView): Bod
   };
 }
 
-export function adaptScoresToChakraProfiles(
-  scoresMap: TropicalScoresMap,
-  input: ProfileInput,
-): {
-  evidenceMap: Record<Domain, ChakraEvidence>;
-  normalizedScoresMap: Record<Domain, { value: number; min: number; max: number; spread: number; timeSensitive: boolean }>;
-  signature: string;
-} {
-  const evidenceMap: Record<Domain, ChakraEvidence> = {} as Record<Domain, ChakraEvidence>;
-  const normalizedScoresMap: Record<Domain, { value: number; min: number; max: number; spread: number; timeSensitive: boolean }> =
-    {} as Record<Domain, { value: number; min: number; max: number; spread: number; timeSensitive: boolean }>;
-
-  for (const domain of Object.keys(scoresMap) as Domain[]) {
-    const result = scoresMap[domain];
-    evidenceMap[domain] = result.evidence;
-    normalizedScoresMap[domain] = {
-      value: result.value,
-      min: result.min,
-      max: result.max,
-      spread: result.spread,
-      timeSensitive: result.timeSensitive,
-    };
-  }
-
-  const signature = `${input.birthDate}-${input.birthPlace}-${input.birthTime || "unknown"}-tropical`;
-
-  return { evidenceMap, normalizedScoresMap, signature };
-}
-      min: score,
-      max: score,
-      spread: 0,
-      timeSensitive: false
-    };
-  }
-
-  const signature = `${input.birthDate}-${input.birthPlace}-${input.birthTime || "unknown"}`;
-  const chakraProfiles = buildChakraProfiles(evidenceMap, normalizedScoresMap, signature);
-
-  return {
-    view,
-    chakraProfiles
-  };
-}
 
 export function adaptScoresToChakraProfiles(
   scoresMap: TropicalScoresMap,
