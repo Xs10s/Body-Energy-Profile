@@ -29,12 +29,29 @@ const hasVitest = async () => {
   return code === 0;
 };
 
+const hasPytest = async () => {
+  const code = await spawnPromise("python3", ["-m", "pytest", "--version"]);
+  return code === 0;
+};
+
 const runVitest = async () => {
   const code = await spawnPromise("npx", ["vitest", "run"]);
   process.exit(code);
 };
 
 const main = async () => {
+  if (await hasPytest()) {
+    const pytestCode = await spawnPromise("python3", ["-m", "pytest", "calc_core_py/tests"]);
+    if (pytestCode !== 0) {
+      process.exit(pytestCode);
+    }
+  } else {
+    console.warn("Pytest not available in this environment; skipping calc_core_py tests. CI will enforce tests.");
+    if (!hasAllowSkip) {
+      process.exit(1);
+    }
+  }
+
   if (await hasVitest()) {
     await runVitest();
     return;

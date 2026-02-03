@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/Home";
 import Results from "@/pages/Results";
 import History from "@/pages/History";
+import PrintEnergyProfile from "@/pages/PrintEnergyProfile";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -14,6 +15,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/result" component={Results} />
       <Route path="/history" component={History} />
+      <Route path="/print/energy-profile" component={PrintEnergyProfile} />
       <Route component={NotFound} />
     </Switch>
   );
