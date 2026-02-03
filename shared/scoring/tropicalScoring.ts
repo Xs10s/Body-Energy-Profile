@@ -124,8 +124,6 @@ const CATEGORIES = ["planet", "house", "aspect", "element", "modality", "dignity
 type RefCategory = (typeof CATEGORIES)[number];
 
 const ROUTES: Record<Domain, (a: PlanetKey, b: PlanetKey) => boolean> = {
-  root: (a, b) => includesPair([a, b], "Saturn", ["Moon", "Sun", "Mars"]),
-const ROUTES: Record<Domain, (a: PlanetKey, b: PlanetKey) => boolean> = {
   root: (a, b) =>
     includesPair([a, b], "Saturn", ["Moon", "Sun", "Mars"]) ||
     includesPair([a, b], "Saturn", ["Uranus", "Neptune", "Pluto"]) ||
@@ -198,7 +196,6 @@ function applyElementPoints(domain: Domain, f: TropicalChartFeatures, signals: C
         reason: `Element ${el} is sterk aanwezig (${Math.round(pct * 100)}%).`,
         tags: [`element:${el}`],
         category: "element"
-        reason: `Element ${el} is sterk aanwezig (${Math.round(pct * 100)}%).`
       }));
     } else if (pct <= ELEMENT_DEFICIENT) {
       delta += pts.deficient;
@@ -210,7 +207,6 @@ function applyElementPoints(domain: Domain, f: TropicalChartFeatures, signals: C
         reason: `Element ${el} is relatief laag (${Math.round(pct * 100)}%).`,
         tags: [`element:${el}`],
         category: "element"
-        reason: `Element ${el} is relatief laag (${Math.round(pct * 100)}%).`
       }));
     }
   }
@@ -253,7 +249,6 @@ function applyHousePoints(domain: Domain, f: TropicalChartFeatures, signals: Cha
       reason: `Huis ${h} heeft relatief veel planetaire nadruk (weight=${(f.houseWeights[h] ?? 0).toFixed(1)}).`,
       tags: [`house:${h}`],
       category: "house"
-      reason: `Huis ${h} heeft relatief veel planetaire nadruk (weight=${(f.houseWeights[h] ?? 0).toFixed(1)}).`
     }));
   }
   return delta;
@@ -287,7 +282,6 @@ function applyPlanetStrengthPoints(domain: Domain, f: TropicalChartFeatures, sig
       reason: `Dignity: ${dignity}${isAngular(pos.house) ? ", angular" : ""}${pos.retrograde ? ", retrograde" : ""}.`,
       tags: [`planet:${planet}`, `dignity:${dignity}`],
       category: "dignity"
-      reason: `Dignity: ${dignity}${isAngular(pos.house) ? ", angular" : ""}${pos.retrograde ? ", retrograde" : ""}.`
     }));
   }
 
@@ -317,7 +311,6 @@ function applyAspectPoints(domain: Domain, f: TropicalChartFeatures, signals: Ch
       reason: `Aspect ${a.type} met orb ${a.orbDeg.toFixed(1)}° (mult ${mult}).`,
       tags: [`aspect:${a.a}_${a.type}_${a.b}`],
       category: "aspect"
-      reason: `Aspect ${a.type} met orb ${a.orbDeg.toFixed(1)}° (mult ${mult}).`
     }));
   }
 
@@ -360,7 +353,6 @@ function applyStressMod(domain: Domain, f: TropicalChartFeatures, signals: Chakr
       reason: `Stress-index ${Math.round(s * 100)}% beïnvloedt dit domein.`,
       tags: ["stress:index"],
       category: "stress"
-      reason: `Stress-index ${Math.round(s * 100)}% beïnvloedt dit domein.`
     }));
   }
 
@@ -373,7 +365,6 @@ function applyStressMod(domain: Domain, f: TropicalChartFeatures, signals: Chakr
       reason: "Hoge stress-index kan drive verhogen maar ook druk/overdrive veroorzaken.",
       tags: ["stress:overdrive"],
       category: "stress"
-      reason: "Hoge stress-index kan drive verhogen maar ook druk/overdrive veroorzaken."
     }));
   }
 
@@ -393,8 +384,8 @@ function enforceEvidenceConstraints(signals: ChakraSignal[]): ChakraSignal[] {
     byCategory.set(category, list);
   }
 
-  for (const list of byCategory.values()) {
-    list.sort((a, b) => b.weight - a.weight || a.factor.localeCompare(b.factor));
+  for (const list of Array.from(byCategory.values())) {
+    list.sort((a: ChakraSignal, b: ChakraSignal) => b.weight - a.weight || a.factor.localeCompare(b.factor));
   }
 
   const picked: ChakraSignal[] = [];
@@ -454,15 +445,6 @@ function getCategory(signal: ChakraSignal): RefCategory {
     default:
       return "planet";
   }
-    (signal) =>
-      !signal.factor.toLowerCase().includes("nakshatra") &&
-      !signal.reason.toLowerCase().includes("nakshatra")
-  );
-
-  return filtered
-    .slice()
-    .sort((a, b) => b.weight - a.weight || a.factor.localeCompare(b.factor))
-    .slice(0, 8);
 }
 
 function makeSignal(args: {
@@ -481,7 +463,6 @@ function makeSignal(args: {
     influence: args.influence,
     weight: args.weight,
     tags: [...args.tags, `category:${args.category}`]
-    weight: args.weight
   };
 }
 

@@ -53,3 +53,20 @@ npm run db:migrate
 
 ### Fallback
 Als `DATABASE_URL` ontbreekt of de verbinding faalt, schakelt de server automatisch terug naar `MemStorage`.
+
+## Gepersonaliseerde teksten (optioneel)
+
+Voor score-gerelateerde personalisatie van chakra-narratieven kun je de Google Gemini API (gratis tier) gebruiken.
+
+### Setup
+1. Maak een API-sleutel aan op [Google AI Studio](https://aistudio.google.com/apikey)
+2. Stel een van deze omgevingsvariabelen in:
+   - `GOOGLE_AI_API_KEY`
+   - `GOOGLE_API_KEY`
+   - `GEMINI_API_KEY`
+
+```bash
+export GOOGLE_AI_API_KEY="jouw-api-sleutel"
+```
+
+Zonder API-sleutel worden standaard template-teksten gebruikt.

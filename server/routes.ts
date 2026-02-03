@@ -3,9 +3,10 @@ import { createServer, type Server } from "http";
 import { getStorageInfo, storage } from "./storage";
 import PDFDocument from "pdfkit";
 import sharp from "sharp";
-import { saveProfileRequestSchema, DOMAIN_LABELS, geocodeResultSchema } from "@shared/schema";
-import { getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
-import type { BodyProfile, GeocodeResult } from "@shared/schema";
+import { saveProfileRequestSchema, DOMAIN_LABELS, profileInputSchema } from "@shared/schema";
+import { generateProfileByView, getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
+import { enhanceChakraProfilesWithGemini } from "./geminiNarrative";
+import type { BodyProfile, GeocodeResult, ProfileInput } from "@shared/schema";
 
 async function svgToPng(svgString: string, width: number = 300): Promise<Buffer | null> {
   try {
@@ -139,6 +140,30 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching profile:", error);
       res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
+  app.post("/api/profiles/generate", async (req, res) => {
+    try {
+      const parseResult = profileInputSchema.safeParse(req.body?.input ?? req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          error: "Invalid profile input",
+          details: parseResult.error.issues,
+        });
+      }
+      const view = req.body?.view === "tropical" ? "tropical" : "sidereal" as const;
+      const normalizedInput = { ...parseResult.data, zodiacMode: view };
+      const profile = generateProfileByView(normalizedInput as ProfileInput, view);
+      const enhancedChakraProfiles = await enhanceChakraProfilesWithGemini(profile.chakraProfiles);
+      const result: BodyProfile = {
+        ...profile,
+        chakraProfiles: enhancedChakraProfiles,
+      };
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating profile:", error);
+      res.status(500).json({ error: "Failed to generate profile" });
     }
   });
 
