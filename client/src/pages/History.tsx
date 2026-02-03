@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
+import { VIEW_TO_VARIANT } from "@shared/variant";
 import type { SavedProfile } from "@shared/schema";
 
 export default function History() {
@@ -40,9 +41,10 @@ export default function History() {
 
   const handleView = (profile: SavedProfile) => {
     const view = profile.profile.view ?? normalizeAstroView(profile.profile.input);
+    const variantId = VIEW_TO_VARIANT[view];
     const inputWithView = { ...profile.profile.input, zodiacMode: view };
     localStorage.setItem("profileInput", JSON.stringify(inputWithView));
-    localStorage.setItem("astroView", view);
+    localStorage.setItem("variantId", variantId);
     setLocation("/result");
   };
 

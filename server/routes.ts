@@ -7,6 +7,9 @@ import { saveProfileRequestSchema, DOMAIN_LABELS, profileInputSchema } from "@sh
 import { generateProfileByView, getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
 import { enhanceChakraProfilesWithGemini } from "./geminiNarrative";
 import type { BodyProfile, GeocodeResult, ProfileInput } from "@shared/schema";
+import { calculateEnergyProfile } from "./energyProfile";
+import { renderEnergyProfilePdf } from "./exportEnergyProfile";
+import { normalizeVariantId } from "@shared/variant";
 
 async function svgToPng(svgString: string, width: number = 300): Promise<Buffer | null> {
   try {
@@ -164,6 +167,52 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating profile:", error);
       res.status(500).json({ error: "Failed to generate profile" });
+    }
+  });
+
+  app.post("/api/energy-profile", async (req, res) => {
+    try {
+      const parseResult = profileInputSchema.safeParse(req.body?.input ?? req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          error: "Invalid profile input",
+          details: parseResult.error.issues,
+        });
+      }
+      const result = await calculateEnergyProfile(parseResult.data);
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating energy profile:", error);
+      res.status(500).json({ error: "Failed to generate energy profile" });
+    }
+  });
+
+  app.get("/api/export/energy-profile.pdf", async (req, res) => {
+    try {
+      const profileId = String(req.query.profile_id || "");
+      const variantId = normalizeVariantId(String(req.query.variant_id || ""));
+
+      if (!profileId || !variantId) {
+        res.status(400).send("Missing profile_id or variant_id");
+        return;
+      }
+
+      const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const pdfBuffer = await renderEnergyProfilePdf({
+        baseUrl,
+        profileId,
+        variantId,
+      });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=\"energy-profile-${profileId}-${variantId}.pdf\"`
+      );
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Error exporting energy profile:", error);
+      res.status(500).send("Failed to export energy profile");
     }
   });
 

@@ -72,11 +72,18 @@ export type Nakshatra = typeof NAKSHATRAS[number];
 export const ZODIAC_MODES = ['sidereal', 'tropical'] as const;
 export type ZodiacMode = typeof ZODIAC_MODES[number];
 
-export type AstroView = ZodiacMode;
+export const ASTRO_VIEWS = ['sidereal', 'tropical', 'bazi'] as const;
+export type AstroView = typeof ASTRO_VIEWS[number];
 
 export const ZODIAC_MODE_LABELS: Record<ZodiacMode, string> = {
   sidereal: 'Sidereaal (Jyotish – Lahiri)',
   tropical: 'Tropisch (Westers)'
+};
+
+export const ASTRO_VIEW_LABELS: Record<AstroView, string> = {
+  sidereal: 'Variant 01',
+  tropical: 'Variant 02',
+  bazi: 'Variant 03'
 };
 
 export const profileInputSchema = z.object({
@@ -333,7 +340,7 @@ export const saveProfileRequestSchema = z.object({
     version: z.string(),
     locale: z.string(),
     generatedAt: z.string(),
-    view: z.enum(['sidereal', 'tropical']).optional(),
+    view: z.enum(['sidereal', 'tropical', 'bazi']).optional(),
     viewLabelNL: z.string().optional(),
     input: profileInputSchema,
     derived: z.object({

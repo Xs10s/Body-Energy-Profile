@@ -1,6 +1,7 @@
 // Single entrypoint for profile generation; only branching point for sidereal vs tropical.
 
 import type { AstroView, BodyProfile, Domain, ProfileInput } from "./schema";
+import { ASTRO_VIEW_LABELS } from "./schema";
 import type { BirthInput } from "./tropical";
 import { buildTropicalChartFeatures } from "./tropical";
 import { computeTropicalChakraScores, type TropicalScoresMap } from "./scoring/tropicalScoring";
@@ -16,19 +17,20 @@ export function normalizeAstroView(input?: ProfileInput | null): AstroView {
 }
 
 export function getViewLabelNL(view: AstroView): string {
-  return view === "tropical" ? "Westers" : "Oosters";
+  return ASTRO_VIEW_LABELS[view];
 }
 
 export function normalizeProfileView(profile: BodyProfile): BodyProfile {
   const view = profile.view ?? normalizeAstroView(profile.input);
   const viewLabelNL = profile.viewLabelNL ?? getViewLabelNL(view);
+  const zodiacMode = view === "tropical" ? "tropical" : "sidereal";
   return {
     ...profile,
     view,
     viewLabelNL,
     input: {
       ...profile.input,
-      zodiacMode: view
+      zodiacMode
     }
   };
 }
@@ -37,8 +39,18 @@ export function generateProfileByView(input: ProfileInput, view: AstroView): Bod
   const normalizedView = view ?? "sidereal";
   const normalizedInput: ProfileInput = {
     ...input,
-    zodiacMode: normalizedView
+    zodiacMode: input.zodiacMode ?? "sidereal"
   };
+
+  if (normalizedView === "bazi") {
+    const fallbackProfile = generateProfile({ ...normalizedInput, zodiacMode: "sidereal" });
+    return {
+      ...fallbackProfile,
+      view: normalizedView,
+      viewLabelNL: getViewLabelNL(normalizedView),
+      input: normalizedInput,
+    };
+  }
 
   if (normalizedView === "tropical") {
     const baseProfile = generateProfile(normalizedInput);
