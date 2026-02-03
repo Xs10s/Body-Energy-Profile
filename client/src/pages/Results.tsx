@@ -16,7 +16,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { BodyProfile, ProfileInput, Domain } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
-import { generateProfileByView, getViewLabelNL, normalizeAstroView, type AstroView } from "@shared/profileBuilder";
+import { generateProfileByView, getViewLabelNL, normalizeAstroView } from "@shared/profileBuilder";
+import type { AstroView } from "@shared/schema";
 
 export default function Results() {
   const [, setLocation] = useLocation();
@@ -88,27 +89,58 @@ export default function Results() {
       return;
     }
 
-    try {
-      const input: ProfileInput = JSON.parse(stored);
-      const view = normalizeAstroView(input);
-      const normalizedInput = { ...input, zodiacMode: view };
-      const generatedProfile = generateProfileByView(normalizedInput, view);
-      localStorage.setItem("astroView", view);
-      setProfileInput(normalizedInput);
-      setAstroView(view);
-      setChartType(view === "tropical" ? "wheel" : "diamond");
-      setProfile(generatedProfile);
-    } catch (error) {
-      console.error("Error generating profile:", error);
-      toast({
-        title: "Fout",
-        description: "Kon profiel niet genereren. Probeer opnieuw.",
-        variant: "destructive"
-      });
-      setLocation("/");
-    } finally {
-      setIsLoading(false);
+    let cancelled = false;
+
+    async function loadProfile() {
+      if (!stored) return;
+      try {
+        const input: ProfileInput = JSON.parse(stored);
+        const view = normalizeAstroView(input);
+        const normalizedInput = { ...input, zodiacMode: view };
+
+        // Prefer server generation (enables Gemini personalization)
+        try {
+          const res = await fetch("/api/profiles/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: normalizedInput, view }),
+            credentials: "include",
+          });
+          if (res.ok && !cancelled) {
+            const generatedProfile = await res.json();
+            localStorage.setItem("astroView", view);
+            setProfileInput(normalizedInput);
+            setAstroView(view);
+            setChartType(view === "tropical" ? "wheel" : "diamond");
+            setProfile(generatedProfile);
+            return;
+          }
+        } catch {
+          // Fall through to client-side generation
+        }
+
+        if (cancelled) return;
+        const generatedProfile = generateProfileByView(normalizedInput, view);
+        localStorage.setItem("astroView", view);
+        setProfileInput(normalizedInput);
+        setAstroView(view);
+        setChartType(view === "tropical" ? "wheel" : "diamond");
+        setProfile(generatedProfile);
+      } catch (error) {
+        console.error("Error generating profile:", error);
+        toast({
+          title: "Fout",
+          description: "Kon profiel niet genereren. Probeer opnieuw.",
+          variant: "destructive"
+        });
+        setLocation("/");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
+
+    loadProfile();
+    return () => { cancelled = true; };
   }, [setLocation, toast]);
 
   const handleSave = () => {

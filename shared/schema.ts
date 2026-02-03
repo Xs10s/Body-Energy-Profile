@@ -259,6 +259,7 @@ export interface ChakraSignal {
   influence: 'supportive' | 'challenging' | 'neutral';
   weight: number;
   reason: string;
+  tags?: string[];
 }
 
 export interface ChakraEvidence {
