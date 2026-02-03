@@ -1,6 +1,7 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Load existing Tailwind config (theme, plugins) - v4 doesn't auto-detect it */
+@config "../../tailwind.config.ts";
 
 /* LIGHT MODE */
 :root {
