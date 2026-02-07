@@ -21,6 +21,7 @@ import type { EnergyProfileResult } from "@shared/energyProfile";
 import { generateProfileByView, normalizeAstroView } from "@shared/profileBuilder";
 import type { AstroView } from "@shared/schema";
 import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE, VIEW_TO_VARIANT, type VariantId } from "@shared/variant";
+import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
 
 export default function Results() {
   const [, setLocation] = useLocation();
@@ -209,6 +210,8 @@ export default function Results() {
   };
 
   const viewLabel = useMemo(() => VARIANT_LABELS[selectedVariantId], [selectedVariantId]);
+  const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
+
 
   if (isLoading) {
     return (
@@ -386,7 +389,29 @@ export default function Results() {
         ) : null}
 
         {astroView === "bazi" && energyProfile ? (
-          <EnergyProfilePanel result={energyProfile} />
+          <>
+            <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground" data-testid="bazi-scoring-note">
+              Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
+              Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
+            </section>
+
+            {baziDomainScores ? (
+              <section>
+                <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores-bazi">Domeinscores (indicatief)</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {DOMAINS.map((domain) => (
+                    <DomainScoreCard
+                      key={domain}
+                      domain={domain as Domain}
+                      score={baziDomainScores[domain as Domain]}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <EnergyProfilePanel result={energyProfile} />
+          </>
         ) : null}
       </main>
 
