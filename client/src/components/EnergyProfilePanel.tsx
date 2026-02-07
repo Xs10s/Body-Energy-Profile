@@ -13,7 +13,7 @@ export function EnergyProfilePanel({ result }: EnergyProfilePanelProps) {
   return (
     <section className="space-y-6" data-testid="bazi-panel">
       <div className="rounded-lg border bg-card p-4">
-        <h2 className="text-lg font-semibold">Variant 03 kernresultaat</h2>
+        <h2 className="text-lg font-semibold">Chinese (BaZi) kernresultaat</h2>
         <div className="grid gap-2 text-sm text-muted-foreground mt-2">
           <div>UTC: {result.birth_utc_datetime}</div>
           <div>Lokaal: {result.birth_local_datetime_resolved}</div>

@@ -81,9 +81,9 @@ export const ZODIAC_MODE_LABELS: Record<ZodiacMode, string> = {
 };
 
 export const ASTRO_VIEW_LABELS: Record<AstroView, string> = {
-  sidereal: 'Variant 01',
-  tropical: 'Variant 02',
-  bazi: 'Variant 03'
+  sidereal: 'Sidereal',
+  tropical: 'Tropical',
+  bazi: 'Chinese (BaZi)'
 };
 
 export const profileInputSchema = z.object({
