@@ -71,6 +71,56 @@ export GOOGLE_AI_API_KEY="jouw-api-sleutel"
 
 Zonder API-sleutel worden standaard template-teksten gebruikt.
 
+## Narrative Engine (LLM)
+
+De Narrative Engine genereert alle gebruikersgerichte Nederlandse teksten voor Energy Profiles via een enkele LLM-aanroep per profiel. Ondersteunde systemen: Jyotish (sidereal), Tropical (westers), Chinees (BaZi).
+
+### Vereisten
+
+- Node.js 20+
+- Optioneel: API-sleutel voor OpenAI, Anthropic of lokale LLM
+
+### Omgevingsvariabelen
+
+| Variabele | Beschrijving | Standaard |
+|-----------|--------------|-----------|
+| `NARRATIVE_PROVIDER` | Provider: `openai`, `anthropic`, `local` | `openai` |
+| `NARRATIVE_API_KEY` | API-sleutel voor de provider | - |
+| `NARRATIVE_MODEL` | Modelnaam (bv. `gpt-4o-mini`) | Provider-specifiek |
+| `NARRATIVE_BASE_URL` | Optioneel; voor lokale of custom endpoints | - |
+
+### Mock mode
+
+Als `NARRATIVE_API_KEY` ontbreekt, gebruikt de engine een deterministische mock-narratief op basis van de meegegeven signalen. De output valideert tegen hetzelfde Zod-schema en is reproduceerbaar (zelfde input ⇒zelfde tekst).
+
+### API
+
+**POST** `/api/narratives/generate`
+
+**Request (voorbeeld):**
+```json
+{
+  "profile": { /* BodyProfile */ }
+}
+```
+Of voor Chinese (BaZi):
+```json
+{
+  "energyProfile": { /* EnergyProfileResult */ },
+  "profileInput": { /* ProfileInput */ }
+}
+```
+
+**Response:** Valide `NarrativeJSON` met `summaryNL`, `sections`, `quality`, etc.
+
+### Caching
+
+Narratieven worden gecached op `chartSignature::systemType::view::narrativeVersion`. Standaard in-memory; optioneel via `setNarrativeCacheStorage()` voor DB-opslag.
+
+### Uitbreiden
+
+- **Nieuwe secties:** Voeg secties toe in `validators.ts` en `prompt.ts`.
+- **Chinees profiel:** Pas `chineseAdapter.ts` aan om meer `chineseFeatures` te mappen (element balance, yin/yang, animal sign, luck pillars).
 ## Energy system selection & scoring contract
 
 De engine ondersteunt nu een model-onafhankelijke scoring contract voor drie systemen:

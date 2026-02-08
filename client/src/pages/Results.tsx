@@ -15,7 +15,10 @@ import { ChakraProfileSection } from "@/components/ChakraProfileSection";
 import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
 import { useToast } from "@/hooks/use-toast";
+import { useNarrative } from "@/hooks/useNarrative";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { mergeNarrativeIntoProfile } from "@shared/llmNarratives";
+import type { BodyProfile, ProfileInput, Domain } from "@shared/schema";
 import type { BodyProfile, ProfileInput, Domain, ChineseMethod, EnergyScoringResult as UnifiedEnergyScoringResult } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
@@ -37,6 +40,7 @@ export default function Results() {
   const [energyScoring, setEnergyScoring] = useState<UnifiedEnergyScoringResult | null>(null);
   const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { generateNarrative: fetchNarrative, narrative, isLoading: isNarrativeLoading } = useNarrative();
 
   const saveProfileMutation = useMutation({
     mutationFn: async (profileData: BodyProfile) => {
@@ -101,6 +105,11 @@ export default function Results() {
             if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
             return;
           }
+          if (!res.ok && !cancelled) {
+            const errBody = await res.json().catch(() => ({}));
+            const detail = errBody.detail ?? errBody.error ?? "Onbekende fout";
+            throw new Error(detail);
+          }
         } else {
           // Prefer server generation (enables Gemini personalization)
           try {
@@ -135,7 +144,9 @@ export default function Results() {
             credentials: "include",
           });
           if (!fallbackEnergyProfileRes.ok) {
-            throw new Error("Failed to generate energy profile");
+            const errBody = await fallbackEnergyProfileRes.json().catch(() => ({}));
+            const detail = errBody.detail ?? errBody.error ?? "Failed to generate energy profile";
+            throw new Error(detail);
           }
           const generatedEnergyProfile = await fallbackEnergyProfileRes.json();
           localStorage.setItem("variantId", variantId);
@@ -160,9 +171,10 @@ export default function Results() {
         }
       } catch (error) {
         console.error("Error generating profile:", error);
+        const message = error instanceof Error ? error.message : "Kon profiel niet genereren. Probeer opnieuw.";
         toast({
           title: "Fout",
-          description: "Kon profiel niet genereren. Probeer opnieuw.",
+          description: message.length > 120 ? `${message.slice(0, 120)}…` : message,
           variant: "destructive"
         });
         setLocation("/");
@@ -200,6 +212,22 @@ export default function Results() {
     setAstroView(nextView);
     setSelectedVariantId(nextVariantId);
     if (nextView === "bazi") {
+      fetch("/api/energy-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: updatedInput }),
+        credentials: "include",
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            const detail = errBody.detail ?? errBody.error ?? "BaZi-profiel kon niet worden geladen.";
+            throw new Error(detail);
+          }
+          return res.json();
+        })
+        .then((data) => {
+          setEnergyProfile(data);
       const nextMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
       setChineseMethod(nextMethod);
       Promise.all([
@@ -221,8 +249,14 @@ export default function Results() {
           setEnergyScoring(scoringRes.ok ? await scoringRes.json() : null);
           setProfile(null);
         })
-        .catch(() => {
+        .catch((err) => {
           setEnergyProfile(null);
+          const message = err instanceof Error ? err.message : "BaZi-profiel kon niet worden geladen.";
+          toast({
+            title: "Chinese (BaZi) niet beschikbaar",
+            description: message.length > 100 ? `${message.slice(0, 100)}…` : message,
+            variant: "destructive"
+          });
           setEnergyScoring(null);
         });
       return;
@@ -235,6 +269,19 @@ export default function Results() {
 
   const viewLabel = useMemo(() => VARIANT_LABELS[selectedVariantId], [selectedVariantId]);
   const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
+
+  const displayProfile = useMemo(() => {
+    if (!profile || !narrative) return profile;
+    return mergeNarrativeIntoProfile(profile, narrative);
+  }, [profile, narrative]);
+
+  useEffect(() => {
+    if (profile && astroView !== "bazi") {
+      fetchNarrative({ profile }).catch(() => {
+        // Fallback: keep existing deterministic text
+      });
+    }
+  }, [profile, astroView, fetchNarrative]);
 
 
   if (isLoading) {
@@ -336,15 +383,21 @@ export default function Results() {
 
         {astroView !== "bazi" && profile ? (
           <>
-            <SummaryHeader profile={profile} />
+            <SummaryHeader profile={displayProfile ?? profile} />
 
             <ChakraProfileSection 
-              chakraProfiles={profile.chakraProfiles}
+              chakraProfiles={(displayProfile ?? profile).chakraProfiles}
               timeUnknown={profile.derived.timeUnknown}
             />
 
+            {isNarrativeLoading && (
+              <p className="text-sm text-muted-foreground" data-testid="text-narrative-loading">
+                Narratief wordt gepersonaliseerd...
+              </p>
+            )}
+
             <HoroscopeSection 
-              profile={profile} 
+              profile={displayProfile ?? profile} 
               chartType={chartType}
               onChartTypeChange={setChartType}
               lockChartType
@@ -357,7 +410,7 @@ export default function Results() {
                   <DomainScoreCard 
                     key={domain} 
                     domain={domain as Domain} 
-                    score={profile.domainScores[domain as Domain]} 
+                    score={(displayProfile ?? profile).domainScores[domain as Domain]} 
                   />
                 ))}
               </div>
@@ -366,18 +419,18 @@ export default function Results() {
             <section>
               <h2 className="text-2xl font-semibold mb-4" data-testid="heading-profile">Jouw profiel</h2>
               <div className="grid md:grid-cols-2 gap-4">
-                <ProfileSectionCard type="strengths" section={profile.sections.strengths} />
-                <ProfileSectionCard type="weaknesses" section={profile.sections.weaknesses} />
-                <ProfileSectionCard type="base" section={profile.sections.base} />
-                <ProfileSectionCard type="nutrition" section={profile.sections.nutrition} />
-                <ProfileSectionCard type="movement" section={profile.sections.movement} />
-                <ProfileSectionCard type="strengthBuilding" section={profile.sections.strengthBuilding} />
-                <ProfileSectionCard type="flexibility" section={profile.sections.flexibility} />
-                <ProfileSectionCard type="functionality" section={profile.sections.functionality} />
+                <ProfileSectionCard type="strengths" section={(displayProfile ?? profile).sections.strengths} />
+                <ProfileSectionCard type="weaknesses" section={(displayProfile ?? profile).sections.weaknesses} />
+                <ProfileSectionCard type="base" section={(displayProfile ?? profile).sections.base} />
+                <ProfileSectionCard type="nutrition" section={(displayProfile ?? profile).sections.nutrition} />
+                <ProfileSectionCard type="movement" section={(displayProfile ?? profile).sections.movement} />
+                <ProfileSectionCard type="strengthBuilding" section={(displayProfile ?? profile).sections.strengthBuilding} />
+                <ProfileSectionCard type="flexibility" section={(displayProfile ?? profile).sections.flexibility} />
+                <ProfileSectionCard type="functionality" section={(displayProfile ?? profile).sections.functionality} />
               </div>
             </section>
 
-            <MethodologyAccordion methodology={profile.methodology} />
+            <MethodologyAccordion methodology={(displayProfile ?? profile).methodology} />
 
             <DebugPanel debugInfo={profile.debugInfo} />
 
@@ -388,7 +441,7 @@ export default function Results() {
                   Actieve kijkwijze: <span className="font-medium">{viewLabel}</span>
                 </p>
                 <div className="mt-3 space-y-2 text-xs">
-                  {profile.chakraProfiles.map((chakra) => {
+                  {(displayProfile ?? profile).chakraProfiles.map((chakra) => {
                     const tags = Array.from(
                       new Set(chakra.signals.flatMap((signal) => signal.tags || []))
                     );
@@ -408,7 +461,7 @@ export default function Results() {
               </section>
             )}
 
-            <DisclaimerBox disclaimer={profile.disclaimer} />
+            <DisclaimerBox disclaimer={(displayProfile ?? profile).disclaimer} />
           </>
         ) : null}
 
