@@ -248,7 +248,7 @@ export default function Results() {
         // Fallback: keep existing deterministic text
       });
     }
-  }, [profile?.generatedAt, astroView]);
+  }, [profile, astroView, fetchNarrative]);
 
 
   if (isLoading) {
