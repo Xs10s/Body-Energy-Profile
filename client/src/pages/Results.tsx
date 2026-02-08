@@ -12,6 +12,7 @@ import { DisclaimerBox } from "@/components/DisclaimerBox";
 import { DebugPanel } from "@/components/DebugPanel";
 import { HoroscopeSection, type ChartType } from "@/components/HoroscopeSection";
 import { ChakraProfileSection } from "@/components/ChakraProfileSection";
+import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -388,8 +389,13 @@ export default function Results() {
           </>
         ) : null}
 
-        {astroView === "bazi" && energyProfile ? (
+        {astroView === "bazi" && energyProfile && profileInput ? (
           <>
+            <BaZiSummaryHeader
+              input={profileInput}
+              localDatetimeResolved={energyProfile.birth_local_datetime_resolved}
+            />
+
             <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground" data-testid="bazi-scoring-note">
               Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
               Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
