@@ -52,26 +52,37 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
       );
       
       if (response.ok) {
-        const result: GeocodeResult = await response.json();
-        setGeocodeResult(result);
-        data.latitude = result.lat;
-        data.longitude = result.lon;
-        data.placeId = result.placeId;
-      } else if (response.status === 404) {
+        const body = await response.json();
+        if (body.found === true && body.lat != null && body.lon != null) {
+          const result = body as GeocodeResult;
+          setGeocodeResult(result);
+          data.latitude = result.lat;
+          data.longitude = result.lon;
+          data.placeId = result.placeId;
+          setGeocodeError(null);
+        } else {
+          setGeocodeResult(null);
+          if (!data.latitude || !data.longitude) {
+            setGeocodeError("Locatie niet gevonden. Profiel wordt toch gegenereerd (coördinaten optioneel).");
+            setShowAdvanced(true);
+          }
+        }
+      } else {
+        setGeocodeResult(null);
         if (!data.latitude || !data.longitude) {
-          setGeocodeError("Locatie niet gevonden. Vul handmatig coördinaten in.");
+          setGeocodeError("Geocodering mislukt. Profiel wordt toch gegenereerd.");
           setShowAdvanced(true);
-          setIsGeocoding(false);
-          return;
         }
       }
     } catch (error) {
       console.error("Geocode error:", error);
+      setGeocodeResult(null);
       if (!data.latitude || !data.longitude) {
-        setGeocodeResult(null);
+        setGeocodeError("Geocodering mislukt. Profiel wordt toch gegenereerd.");
+        setShowAdvanced(true);
       }
     }
-    
+
     setIsGeocoding(false);
     onSubmit(data);
   };

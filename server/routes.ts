@@ -98,18 +98,18 @@ export async function registerRoutes(
     try {
       const place = req.query.place as string;
       const country = req.query.country as string;
-      
+
       if (!place || !country) {
         return res.status(400).json({ error: "Missing place or country parameter" });
       }
-      
+
       const result = await geocodePlace(place, country);
-      
+
       if (!result) {
-        return res.status(404).json({ error: "Location not found" });
+        return res.status(200).json({ found: false, error: "Location not found" });
       }
-      
-      res.json(result);
+
+      res.json({ ...result, found: true });
     } catch (error) {
       console.error("Error geocoding:", error);
       res.status(500).json({ error: "Failed to geocode location" });
@@ -182,8 +182,12 @@ export async function registerRoutes(
       const result = await calculateEnergyProfile(parseResult.data);
       res.json(result);
     } catch (error) {
-      console.error("Error generating energy profile:", error);
-      res.status(500).json({ error: "Failed to generate energy profile" });
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error generating energy profile:", message, error);
+      res.status(500).json({
+        error: "Failed to generate energy profile",
+        detail: message,
+      });
     }
   });
 
