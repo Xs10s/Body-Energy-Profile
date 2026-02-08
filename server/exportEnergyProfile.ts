@@ -5,10 +5,12 @@ export async function renderEnergyProfilePdf({
   profileId,
   variantId,
   authCookie,
+  chineseMethod,
 }: {
   baseUrl: string;
   profileId: string;
   variantId: string;
+  chineseMethod?: string;
   authCookie?: { name: string; value: string; domain: string; path: string };
 }): Promise<Buffer> {
   const browser = await chromium.launch();
@@ -21,9 +23,10 @@ export async function renderEnergyProfilePdf({
     await page.context().addCookies([authCookie]);
   }
 
+  const methodQuery = chineseMethod ? `&chinese_method=${encodeURIComponent(chineseMethod)}` : "";
   const printUrl = `${baseUrl}/print/energy-profile?profile_id=${encodeURIComponent(
     profileId
-  )}&variant_id=${encodeURIComponent(variantId)}`;
+  )}&variant_id=${encodeURIComponent(variantId)}${methodQuery}`;
 
   await page.goto(printUrl, { waitUntil: "networkidle" });
   await page.waitForSelector('[data-export-ready="true"]', { timeout: 20000 });

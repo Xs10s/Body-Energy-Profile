@@ -81,9 +81,9 @@ export const ZODIAC_MODE_LABELS: Record<ZodiacMode, string> = {
 };
 
 export const ASTRO_VIEW_LABELS: Record<AstroView, string> = {
-  sidereal: 'Variant 01',
-  tropical: 'Variant 02',
-  bazi: 'Variant 03'
+  sidereal: 'Sidereal',
+  tropical: 'Tropical',
+  bazi: 'Chinese (BaZi)'
 };
 
 export const profileInputSchema = z.object({
@@ -258,6 +258,71 @@ export interface Methodology {
 export interface Disclaimer {
   text: string;
   whenToConsult: string[];
+}
+
+
+export type AstroSystem = "sidereal" | "tropical" | "chinese";
+export type ChineseMethod = "bazi" | "shengxiao";
+export type EnergyProfileKind = "chakra";
+
+export interface EnergySignal {
+  source: string;
+  influence: 'supportive' | 'challenging' | 'neutral';
+  weight: number;
+  factor: string;
+  reason: string;
+  tags: string[];
+  category: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface EnergyDomainEvidence {
+  rawScore: number;
+  adjustedScore: number;
+  signals: EnergySignal[];
+  selection: {
+    totalSignals: number;
+    supportiveCount: number;
+    challengingCount: number;
+    categoriesPresent: string[];
+    usedFallback: boolean;
+  };
+}
+
+export interface EnergyScoringDomainResult {
+  domainId: string;
+  score: number;
+  scoreMin: number;
+  scoreMax: number;
+  spread: number;
+  evidence: EnergyDomainEvidence;
+}
+
+export interface EnergyScoringResult {
+  kind: EnergyProfileKind;
+  system: AstroSystem;
+  method?: ChineseMethod;
+  viewLabelNL: string;
+  chartSignature: string;
+  time: {
+    provided: boolean;
+    timeSensitive: boolean;
+    samples?: number;
+  };
+  domains: EnergyScoringDomainResult[];
+  explain: {
+    parityNotes: Array<{
+      id: string;
+      systemPair: "sidereal-vs-tropical" | "chinese-vs-western";
+      shortNL: string;
+      tags: string[];
+    }>;
+  };
+}
+
+export interface EnergySelection {
+  system: AstroSystem;
+  method?: ChineseMethod;
 }
 
 export interface ChakraSignal {

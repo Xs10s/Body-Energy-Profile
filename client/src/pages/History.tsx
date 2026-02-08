@@ -42,9 +42,10 @@ export default function History() {
   const handleView = (profile: SavedProfile) => {
     const view = profile.profile.view ?? normalizeAstroView(profile.profile.input);
     const variantId = VIEW_TO_VARIANT[view];
-    const inputWithView = { ...profile.profile.input, zodiacMode: view };
+    const inputWithView = { ...profile.profile.input, zodiacMode: view === "tropical" ? "tropical" : "sidereal" };
     localStorage.setItem("profileInput", JSON.stringify(inputWithView));
     localStorage.setItem("variantId", variantId);
+    if (view === "bazi") localStorage.setItem("chineseMethod", "bazi");
     setLocation("/result");
   };
 
