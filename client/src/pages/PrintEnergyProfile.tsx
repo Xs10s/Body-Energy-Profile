@@ -4,7 +4,7 @@ import { ChakraProfileSection } from "@/components/ChakraProfileSection";
 import { DomainScoreCard } from "@/components/DomainScoreCard";
 import { ProfileSectionCard } from "@/components/ProfileSection";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
-import type { BodyProfile, Domain } from "@shared/schema";
+import type { BodyProfile, Domain, ChineseMethod, EnergyScoringResult as UnifiedEnergyScoringResult } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
 import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE } from "@shared/variant";
@@ -13,11 +13,13 @@ import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
 export default function PrintEnergyProfile() {
   const [profile, setProfile] = useState<BodyProfile | null>(null);
   const [energyProfile, setEnergyProfile] = useState<EnergyProfileResult | null>(null);
+  const [energyScoring, setEnergyScoring] = useState<UnifiedEnergyScoringResult | null>(null);
   const [exportReady, setExportReady] = useState(false);
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const profileId = searchParams.get("profile_id") || "";
   const variantId = normalizeVariantId(searchParams.get("variant_id")) ?? "variant_01";
   const view = VARIANT_TO_VIEW[variantId];
+  const chineseMethod = (searchParams.get("chinese_method") as ChineseMethod | null) ?? "bazi";
   const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
 
   useEffect(() => {
@@ -46,6 +48,8 @@ export default function PrintEnergyProfile() {
         const data = await res.json();
         if (cancelled) return;
         setEnergyProfile(data);
+        const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] }, selection: { system: "chinese", method: chineseMethod } }), credentials: "include" });
+        if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
         setProfile(null);
       } else {
         const res = await fetch("/api/profiles/generate", {
@@ -59,6 +63,7 @@ export default function PrintEnergyProfile() {
         if (cancelled) return;
         setProfile(data);
         setEnergyProfile(null);
+        setEnergyScoring(null);
       }
     }
 
@@ -66,7 +71,7 @@ export default function PrintEnergyProfile() {
     return () => {
       cancelled = true;
     };
-  }, [profileId, variantId, view]);
+  }, [profileId, variantId, view, chineseMethod]);
 
   useEffect(() => {
     if (!profile && !energyProfile) return;
@@ -146,6 +151,17 @@ export default function PrintEnergyProfile() {
           </>
         ) : null}
 
+        {view === "bazi" && (energyProfile || energyScoring) ? (
+          <>
+            {energyScoring ? (
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">Domeinscores ({energyScoring.method === "shengxiao" ? "Shengxiao" : "BaZi"})</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {energyScoring.domains.map((domainResult) => (
+                    <DomainScoreCard
+                      key={domainResult.domainId}
+                      domain={domainResult.domainId as Domain}
+                      score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
         {view === "bazi" && energyProfile ? (
           <>
             <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
@@ -168,6 +184,7 @@ export default function PrintEnergyProfile() {
               </section>
             ) : null}
 
+            {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
             <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}

@@ -16,7 +16,7 @@ import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { BodyProfile, ProfileInput, Domain } from "@shared/schema";
+import type { BodyProfile, ProfileInput, Domain, ChineseMethod, EnergyScoringResult as UnifiedEnergyScoringResult } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
 import { generateProfileByView, normalizeAstroView } from "@shared/profileBuilder";
@@ -33,6 +33,8 @@ export default function Results() {
   const [astroView, setAstroView] = useState<AstroView>("sidereal");
   const [selectedVariantId, setSelectedVariantId] = useState<VariantId>("variant_01");
   const [profileInput, setProfileInput] = useState<ProfileInput | null>(null);
+  const [chineseMethod, setChineseMethod] = useState<ChineseMethod>("bazi");
+  const [energyScoring, setEnergyScoring] = useState<UnifiedEnergyScoringResult | null>(null);
   const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -76,6 +78,7 @@ export default function Results() {
         const fallbackVariant = VIEW_TO_VARIANT[normalizedView];
         const variantId = storedVariantId ?? fallbackVariant;
         const view = VARIANT_TO_VIEW[variantId];
+        const storedChineseMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
         const normalizedInput = { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] };
 
         if (view === "bazi") {
@@ -93,6 +96,9 @@ export default function Results() {
             setSelectedVariantId(variantId);
             setEnergyProfile(generatedEnergyProfile);
             setProfile(null);
+            setChineseMethod(storedChineseMethod);
+            const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: normalizedInput, selection: { system: "chinese", method: storedChineseMethod } }), credentials: "include" });
+            if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
             return;
           }
         } else {
@@ -138,6 +144,9 @@ export default function Results() {
           setSelectedVariantId(variantId);
           setEnergyProfile(generatedEnergyProfile);
           setProfile(null);
+          setChineseMethod(storedChineseMethod);
+          const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: normalizedInput, selection: { system: "chinese", method: storedChineseMethod } }), credentials: "include" });
+          if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
         } else {
           const generatedProfile = generateProfileByView(normalizedInput, view);
           localStorage.setItem("variantId", variantId);
@@ -147,6 +156,7 @@ export default function Results() {
           setChartType(view === "tropical" ? "wheel" : "diamond");
           setProfile(generatedProfile);
           setEnergyProfile(null);
+          setEnergyScoring(null);
         }
       } catch (error) {
         console.error("Error generating profile:", error);
@@ -173,9 +183,10 @@ export default function Results() {
 
   const handleDownloadPDF = () => {
     if (!savedProfileId) return;
+    const methodQuery = astroView === "bazi" ? `&chinese_method=${encodeURIComponent(chineseMethod)}` : "";
     window.location.href = `/api/export/energy-profile.pdf?profile_id=${encodeURIComponent(
       savedProfileId
-    )}&variant_id=${encodeURIComponent(selectedVariantId)}`;
+    )}&variant_id=${encodeURIComponent(selectedVariantId)}${methodQuery}`;
   };
 
   const handleViewChange = (nextVariantId: VariantId) => {
@@ -189,25 +200,37 @@ export default function Results() {
     setAstroView(nextView);
     setSelectedVariantId(nextVariantId);
     if (nextView === "bazi") {
-      fetch("/api/energy-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: updatedInput }),
-        credentials: "include",
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          setEnergyProfile(data);
+      const nextMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
+      setChineseMethod(nextMethod);
+      Promise.all([
+        fetch("/api/energy-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: updatedInput }),
+          credentials: "include",
+        }),
+        fetch("/api/energy-scoring", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ input: updatedInput, selection: { system: "chinese", method: nextMethod } }),
+          credentials: "include",
+        })
+      ])
+        .then(async ([profileRes, scoringRes]) => {
+          setEnergyProfile(profileRes.ok ? await profileRes.json() : null);
+          setEnergyScoring(scoringRes.ok ? await scoringRes.json() : null);
           setProfile(null);
         })
         .catch(() => {
           setEnergyProfile(null);
+          setEnergyScoring(null);
         });
       return;
     }
     setChartType(nextView === "tropical" ? "wheel" : "diamond");
     setProfile(generateProfileByView(updatedInput, nextView));
     setEnergyProfile(null);
+    setEnergyScoring(null);
   };
 
   const viewLabel = useMemo(() => VARIANT_LABELS[selectedVariantId], [selectedVariantId]);
@@ -389,6 +412,37 @@ export default function Results() {
           </>
         ) : null}
 
+        {astroView === "bazi" && (energyProfile || energyScoring) ? (
+          <>
+            <section className="flex items-center gap-2" data-testid="section-chinese-method-toggle">
+              <span className="text-sm text-muted-foreground">Chinese methode</span>
+              <Button size="sm" variant={chineseMethod === "bazi" ? "default" : "outline"} onClick={() => {
+                if (!profileInput) return;
+                localStorage.setItem("chineseMethod", "bazi");
+                setChineseMethod("bazi");
+                fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: profileInput, selection: { system: "chinese", method: "bazi" } }), credentials: "include" })
+                  .then((r) => r.ok ? r.json() : null)
+                  .then((data) => setEnergyScoring(data));
+              }}>BaZi</Button>
+              <Button size="sm" variant={chineseMethod === "shengxiao" ? "default" : "outline"} onClick={() => {
+                if (!profileInput) return;
+                localStorage.setItem("chineseMethod", "shengxiao");
+                setChineseMethod("shengxiao");
+                fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: profileInput, selection: { system: "chinese", method: "shengxiao" } }), credentials: "include" })
+                  .then((r) => r.ok ? r.json() : null)
+                  .then((data) => setEnergyScoring(data));
+              }}>Shengxiao</Button>
+            </section>
+
+            {energyScoring ? (
+              <section>
+                <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores-bazi">Domeinscores ({energyScoring.method === "shengxiao" ? "Shengxiao" : "BaZi"})</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {energyScoring.domains.map((domainResult) => (
+                    <DomainScoreCard
+                      key={domainResult.domainId}
+                      domain={domainResult.domainId as Domain}
+                      score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
         {astroView === "bazi" && energyProfile && profileInput ? (
           <>
             <BaZiSummaryHeader
@@ -416,6 +470,7 @@ export default function Results() {
               </section>
             ) : null}
 
+            {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
             <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}
