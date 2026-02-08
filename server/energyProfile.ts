@@ -16,13 +16,17 @@ export interface EnergyProfileResult {
   chinese_bazi: unknown;
 }
 
-const pythonPathCandidates = ["python3", "python"];
+// Windows often has "py" launcher; Unix has python3 or python
+const pythonPathCandidates = process.platform === "win32"
+  ? ["py", "python", "python3"]
+  : ["python3", "python"];
 
 async function resolvePythonExecutable(): Promise<string> {
   for (const candidate of pythonPathCandidates) {
     try {
+      const args = candidate === "py" ? ["-3", "--version"] : ["--version"];
       await new Promise<void>((resolve, reject) => {
-        execFile(candidate, ["--version"], (error) => {
+        execFile(candidate, args, (error) => {
           if (error) {
             reject(error);
             return;
@@ -35,25 +39,29 @@ async function resolvePythonExecutable(): Promise<string> {
       continue;
     }
   }
-  return "python3";
+  return pythonPathCandidates[0];
 }
 
 export async function calculateEnergyProfile(input: ProfileInput): Promise<EnergyProfileResult> {
   const pythonExecutable = await resolvePythonExecutable();
   const scriptPath = join(process.cwd(), "calc_core_py", "entrypoint.py");
 
+  const lat = input.latitude != null ? Number(input.latitude) : 0;
+  const lon = input.longitude != null ? Number(input.longitude) : 0;
+
   const payload = JSON.stringify({
     birthDate: input.birthDate,
-    birthTime: input.birthTime,
-    timezone: input.timezone,
-    latitude: input.latitude,
-    longitude: input.longitude,
+    birthTime: input.birthTime ?? null,
+    timezone: input.timezone ?? "Europe/Amsterdam",
+    latitude: lat,
+    longitude: lon,
     altitude: null,
-    timeUnknown: input.timeUnknown,
+    timeUnknown: input.timeUnknown ?? false,
   });
 
   return new Promise<EnergyProfileResult>((resolve, reject) => {
-    const child = spawn(pythonExecutable, [scriptPath], { stdio: ["pipe", "pipe", "pipe"] });
+    const spawnArgs = pythonExecutable === "py" ? ["-3", scriptPath] : [scriptPath];
+    const child = spawn(pythonExecutable, spawnArgs, { stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
 
@@ -63,15 +71,19 @@ export async function calculateEnergyProfile(input: ProfileInput): Promise<Energ
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
     });
-    child.on("close", (code) => {
-      if (code !== 0) {
-        reject(new Error(`calc_core_py failed (${code}): ${stderr}`));
+    child.on("error", (err) => {
+      reject(new Error(`calc_core_py spawn failed: ${err.message}. Is Python installed?`));
+    });
+    child.on("close", (code, signal) => {
+      if (code !== 0 && code != null) {
+        const detail = stderr.trim() || stdout.trim() || signal || "unknown";
+        reject(new Error(`calc_core_py failed (exit ${code}): ${detail}`));
         return;
       }
       try {
         resolve(JSON.parse(stdout) as EnergyProfileResult);
       } catch (error) {
-        reject(error);
+        reject(new Error(`calc_core_py invalid output: ${(error as Error).message}. stderr: ${stderr}`));
       }
     });
 

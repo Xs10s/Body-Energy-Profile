@@ -8,6 +8,7 @@ import type { BodyProfile, Domain, ChineseMethod, EnergyScoringResult as Unified
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
 import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE } from "@shared/variant";
+import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
 
 export default function PrintEnergyProfile() {
   const [profile, setProfile] = useState<BodyProfile | null>(null);
@@ -19,6 +20,7 @@ export default function PrintEnergyProfile() {
   const variantId = normalizeVariantId(searchParams.get("variant_id")) ?? "variant_01";
   const view = VARIANT_TO_VIEW[variantId];
   const chineseMethod = (searchParams.get("chinese_method") as ChineseMethod | null) ?? "bazi";
+  const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +162,22 @@ export default function PrintEnergyProfile() {
                       key={domainResult.domainId}
                       domain={domainResult.domainId as Domain}
                       score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
+        {view === "bazi" && energyProfile ? (
+          <>
+            <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+              Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
+              Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
+            </section>
+
+            {baziDomainScores ? (
+              <section>
+                <h2 className="text-2xl font-semibold mb-4">Domeinscores (indicatief)</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {DOMAINS.map((domain) => (
+                    <DomainScoreCard
+                      key={domain}
+                      domain={domain as Domain}
+                      score={baziDomainScores[domain as Domain]}
                     />
                   ))}
                 </div>
@@ -167,6 +185,7 @@ export default function PrintEnergyProfile() {
             ) : null}
 
             {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
+            <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}
       </div>

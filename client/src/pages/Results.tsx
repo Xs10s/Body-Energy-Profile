@@ -12,6 +12,7 @@ import { DisclaimerBox } from "@/components/DisclaimerBox";
 import { DebugPanel } from "@/components/DebugPanel";
 import { HoroscopeSection, type ChartType } from "@/components/HoroscopeSection";
 import { ChakraProfileSection } from "@/components/ChakraProfileSection";
+import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -21,6 +22,7 @@ import type { EnergyProfileResult } from "@shared/energyProfile";
 import { generateProfileByView, normalizeAstroView } from "@shared/profileBuilder";
 import type { AstroView } from "@shared/schema";
 import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE, VIEW_TO_VARIANT, type VariantId } from "@shared/variant";
+import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
 
 export default function Results() {
   const [, setLocation] = useLocation();
@@ -232,6 +234,8 @@ export default function Results() {
   };
 
   const viewLabel = useMemo(() => VARIANT_LABELS[selectedVariantId], [selectedVariantId]);
+  const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
+
 
   if (isLoading) {
     return (
@@ -439,6 +443,27 @@ export default function Results() {
                       key={domainResult.domainId}
                       domain={domainResult.domainId as Domain}
                       score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
+        {astroView === "bazi" && energyProfile && profileInput ? (
+          <>
+            <BaZiSummaryHeader
+              input={profileInput}
+              localDatetimeResolved={energyProfile.birth_local_datetime_resolved}
+            />
+
+            <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground" data-testid="bazi-scoring-note">
+              Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
+              Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
+            </section>
+
+            {baziDomainScores ? (
+              <section>
+                <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores-bazi">Domeinscores (indicatief)</h2>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {DOMAINS.map((domain) => (
+                    <DomainScoreCard
+                      key={domain}
+                      domain={domain as Domain}
+                      score={baziDomainScores[domain as Domain]}
                     />
                   ))}
                 </div>
@@ -446,6 +471,7 @@ export default function Results() {
             ) : null}
 
             {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
+            <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}
       </main>

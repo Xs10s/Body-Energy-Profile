@@ -78,4 +78,27 @@ describe("computeBaziDomainScores", () => {
     expect(waterHeavy.sacral.value).toBeGreaterThan(fireHeavy.sacral.value);
     expect(fireHeavy.solar.value).toBeGreaterThan(waterHeavy.solar.value);
   });
+
+  it("works with Python API keys (element_01..05, polarity_01/02)", () => {
+    const result = makeResult({
+      day_master: { stem_id: "stem_01", element_id: "element_03", polarity_id: "polarity_02" },
+      elements_visible: {
+        element_01: { count: 1, ratio: 0.2 },
+        element_02: { count: 1, ratio: 0.2 },
+        element_03: { count: 2, ratio: 0.4 },
+        element_04: { count: 0, ratio: 0 },
+        element_05: { count: 1, ratio: 0.2 },
+      },
+      polarity_visible: {
+        polarity_01: { count: 2, ratio: 0.4 },
+        polarity_02: { count: 3, ratio: 0.6 },
+      },
+    });
+    const scores = computeBaziDomainScores(result);
+    expect(Object.keys(scores)).toHaveLength(7);
+    for (const score of Object.values(scores)) {
+      expect(score.value).toBeGreaterThanOrEqual(20);
+      expect(score.value).toBeLessThanOrEqual(90);
+    }
+  });
 });
