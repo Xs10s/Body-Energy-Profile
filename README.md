@@ -121,3 +121,47 @@ Narratieven worden gecached op `chartSignature::systemType::view::narrativeVersi
 
 - **Nieuwe secties:** Voeg secties toe in `validators.ts` en `prompt.ts`.
 - **Chinees profiel:** Pas `chineseAdapter.ts` aan om meer `chineseFeatures` te mappen (element balance, yin/yang, animal sign, luck pillars).
+## Energy system selection & scoring contract
+
+De engine ondersteunt nu een model-onafhankelijke scoring contract voor drie systemen:
+
+- `sidereal`
+- `tropical`
+- `chinese` met methodes `bazi` en `shengxiao`
+
+Nieuwe API-route:
+
+```bash
+POST /api/energy-scoring
+```
+
+Payload:
+
+```json
+{
+  "input": { "birthDate": "...", "birthPlace": "..." },
+  "selection": { "system": "chinese", "method": "bazi" }
+}
+```
+
+Output volgt `EnergyScoringResult` (zie `shared/schema.ts`) met:
+- deterministische `chartSignature`
+- domeinscores met `score/scoreMin/scoreMax/spread`
+- compacte feitelijke signalen met `tags`, `category`, `meta`
+- parity-notes (waarom systemen kunnen verschillen)
+
+### Wat lokaal wordt berekend
+
+- Astronomische chart features en domeinscores (sidereal/tropical)
+- Chinese scoring mapping (BaZi/Shengxiao) op basis van gestructureerde signalen
+- Deterministische evidence-selectie voor LLM input
+
+### Wat de LLM consumeert
+
+De LLM ontvangt géén narratief templates uit deze scoringlaag, maar gestructureerde evidence:
+- `domains[].evidence.signals[]`
+- `signals[].tags`
+- `signals[].category`
+- `explain.parityNotes[]`
+
+Zo blijft de tekstgeneratie model-agnostisch en reproduceerbaar.

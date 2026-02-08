@@ -260,6 +260,71 @@ export interface Disclaimer {
   whenToConsult: string[];
 }
 
+
+export type AstroSystem = "sidereal" | "tropical" | "chinese";
+export type ChineseMethod = "bazi" | "shengxiao";
+export type EnergyProfileKind = "chakra";
+
+export interface EnergySignal {
+  source: string;
+  influence: 'supportive' | 'challenging' | 'neutral';
+  weight: number;
+  factor: string;
+  reason: string;
+  tags: string[];
+  category: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface EnergyDomainEvidence {
+  rawScore: number;
+  adjustedScore: number;
+  signals: EnergySignal[];
+  selection: {
+    totalSignals: number;
+    supportiveCount: number;
+    challengingCount: number;
+    categoriesPresent: string[];
+    usedFallback: boolean;
+  };
+}
+
+export interface EnergyScoringDomainResult {
+  domainId: string;
+  score: number;
+  scoreMin: number;
+  scoreMax: number;
+  spread: number;
+  evidence: EnergyDomainEvidence;
+}
+
+export interface EnergyScoringResult {
+  kind: EnergyProfileKind;
+  system: AstroSystem;
+  method?: ChineseMethod;
+  viewLabelNL: string;
+  chartSignature: string;
+  time: {
+    provided: boolean;
+    timeSensitive: boolean;
+    samples?: number;
+  };
+  domains: EnergyScoringDomainResult[];
+  explain: {
+    parityNotes: Array<{
+      id: string;
+      systemPair: "sidereal-vs-tropical" | "chinese-vs-western";
+      shortNL: string;
+      tags: string[];
+    }>;
+  };
+}
+
+export interface EnergySelection {
+  system: AstroSystem;
+  method?: ChineseMethod;
+}
+
 export interface ChakraSignal {
   source: string;
   factor: string;

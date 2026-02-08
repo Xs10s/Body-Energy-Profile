@@ -8,6 +8,7 @@ import { generateProfileByView, getViewLabelNL, normalizeAstroView } from "@shar
 import { enhanceChakraProfilesWithGemini } from "./geminiNarrative";
 import type { BodyProfile, GeocodeResult, ProfileInput } from "@shared/schema";
 import { calculateEnergyProfile } from "./energyProfile";
+import { generateEnergyProfile } from "./generateEnergyProfile";
 import { renderEnergyProfilePdf } from "./exportEnergyProfile";
 import { normalizeVariantId } from "@shared/variant";
 import {
@@ -229,6 +230,20 @@ export async function registerRoutes(
         error: "Failed to generate narrative",
         detail: error instanceof Error ? error.message : "Unknown error",
       });
+
+
+  app.post("/api/energy-scoring", async (req, res) => {
+    try {
+      const parseResult = profileInputSchema.safeParse(req.body?.input ?? req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid profile input", details: parseResult.error.issues });
+      }
+      const selection = req.body?.selection ?? { system: "sidereal" };
+      const result = await generateEnergyProfile(parseResult.data, selection);
+      res.json(result);
+    } catch (error) {
+      console.error("Error generating energy scoring:", error);
+      res.status(500).json({ error: "Failed to generate energy scoring" });
     }
   });
 
@@ -257,6 +272,7 @@ export async function registerRoutes(
     try {
       const profileId = String(req.query.profile_id || "");
       const variantId = normalizeVariantId(String(req.query.variant_id || ""));
+      const chineseMethod = String(req.query.chinese_method || "bazi");
 
       if (!profileId || !variantId) {
         res.status(400).send("Missing profile_id or variant_id");
@@ -268,6 +284,7 @@ export async function registerRoutes(
         baseUrl,
         profileId,
         variantId,
+        chineseMethod,
       });
 
       res.setHeader("Content-Type", "application/pdf");
