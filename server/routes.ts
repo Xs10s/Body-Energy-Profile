@@ -10,6 +10,15 @@ import type { BodyProfile, GeocodeResult, ProfileInput } from "@shared/schema";
 import { calculateEnergyProfile } from "./energyProfile";
 import { renderEnergyProfilePdf } from "./exportEnergyProfile";
 import { normalizeVariantId } from "@shared/variant";
+import {
+  generateNarrative,
+  enrichInputWithQuality,
+  bodyProfileToNarrativeInput,
+  energyProfileToNarrativeInput,
+  buildCacheKey,
+  getCachedNarrative,
+  setCachedNarrative,
+} from "@shared/llmNarratives";
 
 async function svgToPng(svgString: string, width: number = 300): Promise<Buffer | null> {
   try {
@@ -76,13 +85,14 @@ export async function registerRoutes(
 ): Promise<Server> {
   const normalizeProfileView = (profile: BodyProfile): BodyProfile => {
     const view = profile.view ?? normalizeAstroView(profile.input);
+    const zodiacMode = view === "bazi" ? "sidereal" : view;
     return {
       ...profile,
       view,
       viewLabelNL: profile.viewLabelNL ?? getViewLabelNL(view),
       input: {
         ...profile.input,
-        zodiacMode: view
+        zodiacMode
       }
     };
   };
@@ -167,6 +177,58 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error generating profile:", error);
       res.status(500).json({ error: "Failed to generate profile" });
+    }
+  });
+
+  app.post("/api/narratives/generate", async (req, res) => {
+    try {
+      const body = req.body ?? {};
+      let input;
+
+      if (body.profile) {
+        input = bodyProfileToNarrativeInput(body.profile, body.narrativeVersion);
+      } else if (body.energyProfile && body.profileInput) {
+        const profileInput = body.profileInput;
+        const timeUnknown = profileInput?.timeUnknown ?? !profileInput?.birthTime;
+        const locationLabel = profileInput?.birthPlace
+          ? `${profileInput.birthPlace}, ${profileInput.country ?? ""}`
+          : undefined;
+        input = energyProfileToNarrativeInput(
+          body.energyProfile,
+          timeUnknown,
+          locationLabel,
+          profileInput?.timezone,
+          body.narrativeVersion
+        );
+      } else if (body.input) {
+        input = body.input;
+      } else {
+        return res.status(400).json({
+          error: "Invalid payload: provide profile, or energyProfile+profileInput, or input",
+        });
+      }
+
+      const enriched = enrichInputWithQuality(input);
+      const cacheKey = buildCacheKey(
+        enriched.quality.inputSignature,
+        enriched.systemType,
+        enriched.view,
+        enriched.narrativeVersion
+      );
+
+      let narrative = await getCachedNarrative(cacheKey);
+      if (!narrative) {
+        narrative = await generateNarrative(input);
+        await setCachedNarrative(cacheKey, narrative);
+      }
+
+      res.json(narrative);
+    } catch (error) {
+      console.error("Error generating narrative:", error);
+      res.status(500).json({
+        error: "Failed to generate narrative",
+        detail: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   });
 
