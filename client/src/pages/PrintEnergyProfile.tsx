@@ -3,65 +3,69 @@ import { SummaryHeader } from "@/components/SummaryHeader";
 import { ChakraProfileSection } from "@/components/ChakraProfileSection";
 import { DomainScoreCard } from "@/components/DomainScoreCard";
 import { ProfileSectionCard } from "@/components/ProfileSection";
+import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
-import type { BodyProfile, Domain, ChineseMethod, EnergyScoringResult as UnifiedEnergyScoringResult } from "@shared/schema";
+import type { BodyProfile, ChineseMethod, Domain, EnergyScoringResult } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
 import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE } from "@shared/variant";
-import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
 
 export default function PrintEnergyProfile() {
   const [profile, setProfile] = useState<BodyProfile | null>(null);
+  const [profileInput, setProfileInput] = useState<BodyProfile["input"] | null>(null);
   const [energyProfile, setEnergyProfile] = useState<EnergyProfileResult | null>(null);
-  const [energyScoring, setEnergyScoring] = useState<UnifiedEnergyScoringResult | null>(null);
+  const [energyScoring, setEnergyScoring] = useState<EnergyScoringResult | null>(null);
   const [exportReady, setExportReady] = useState(false);
+
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const profileId = searchParams.get("profile_id") || "";
   const variantId = normalizeVariantId(searchParams.get("variant_id")) ?? "variant_01";
   const view = VARIANT_TO_VIEW[variantId];
   const chineseMethod = (searchParams.get("chinese_method") as ChineseMethod | null) ?? "bazi";
-  const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadData() {
       if (!profileId) return;
-      const profileRes = await fetch(`/api/profiles/${encodeURIComponent(profileId)}`, {
-        credentials: "include",
-      });
-      if (!profileRes.ok) {
-        return;
-      }
+      const profileRes = await fetch(`/api/profiles/${encodeURIComponent(profileId)}`, { credentials: "include" });
+      if (!profileRes.ok) return;
       const saved = await profileRes.json();
       const input = saved?.profile?.input;
-      if (!input) return;
+      if (!input || cancelled) return;
+
+      setProfileInput(input);
 
       if (view === "bazi") {
-        const res = await fetch("/api/energy-profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] } }),
-          credentials: "include",
-        });
-        if (!res.ok) return;
-        const data = await res.json();
+        const [energyRes, scoringRes] = await Promise.all([
+          fetch("/api/energy-profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] } }),
+            credentials: "include",
+          }),
+          fetch("/api/energy-scoring", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] }, selection: { system: "chinese", method: chineseMethod } }),
+            credentials: "include",
+          }),
+        ]);
+
         if (cancelled) return;
-        setEnergyProfile(data);
-        const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] }, selection: { system: "chinese", method: chineseMethod } }), credentials: "include" });
-        if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
+        setEnergyProfile(energyRes.ok ? await energyRes.json() : null);
+        setEnergyScoring(scoringRes.ok ? await scoringRes.json() : null);
         setProfile(null);
       } else {
-        const res = await fetch("/api/profiles/generate", {
+        const generatedRes = await fetch("/api/profiles/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ input: { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] }, view }),
           credentials: "include",
         });
-        if (!res.ok) return;
-        const data = await res.json();
+
         if (cancelled) return;
-        setProfile(data);
+        setProfile(generatedRes.ok ? await generatedRes.json() : null);
         setEnergyProfile(null);
         setEnergyScoring(null);
       }
@@ -76,17 +80,15 @@ export default function PrintEnergyProfile() {
   useEffect(() => {
     if (!profile && !energyProfile) return;
     let cancelled = false;
+
     async function markReady() {
       try {
-        if (document.fonts?.ready) {
-          await document.fonts.ready;
-        }
+        if (document.fonts?.ready) await document.fonts.ready;
       } finally {
-        if (!cancelled) {
-          setExportReady(true);
-        }
+        if (!cancelled) setExportReady(true);
       }
     }
+
     markReady();
     return () => {
       cancelled = true;
@@ -104,10 +106,8 @@ export default function PrintEnergyProfile() {
           }
         `}
       </style>
-      <div
-        className="print-root py-8 space-y-8"
-        data-export-ready={exportReady ? "true" : undefined}
-      >
+
+      <div className="print-root py-8 space-y-8" data-export-ready={exportReady ? "true" : undefined}>
         <section className="space-y-2">
           <h1 className="text-2xl font-semibold">{VARIANT_LABELS[variantId]}</h1>
           <p className="text-sm text-muted-foreground">energy-profile print</p>
@@ -116,21 +116,13 @@ export default function PrintEnergyProfile() {
         {view !== "bazi" && profile ? (
           <>
             <SummaryHeader profile={profile} />
-
-            <ChakraProfileSection 
-              chakraProfiles={profile.chakraProfiles}
-              timeUnknown={profile.derived.timeUnknown}
-            />
+            <ChakraProfileSection chakraProfiles={profile.chakraProfiles} timeUnknown={profile.derived.timeUnknown} />
 
             <section>
               <h2 className="text-2xl font-semibold mb-4">Domeinscores</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {DOMAINS.map((domain) => (
-                  <DomainScoreCard 
-                    key={domain} 
-                    domain={domain as Domain} 
-                    score={profile.domainScores[domain as Domain]} 
-                  />
+                  <DomainScoreCard key={domain} domain={domain as Domain} score={profile.domainScores[domain as Domain]} />
                 ))}
               </div>
             </section>
@@ -151,8 +143,10 @@ export default function PrintEnergyProfile() {
           </>
         ) : null}
 
-        {view === "bazi" && (energyProfile || energyScoring) ? (
+        {view === "bazi" && energyProfile ? (
           <>
+            {profileInput ? <BaZiSummaryHeader input={profileInput} localDatetimeResolved={energyProfile.birth_local_datetime_resolved} /> : null}
+
             {energyScoring ? (
               <section>
                 <h2 className="text-2xl font-semibold mb-4">Domeinscores ({energyScoring.method === "shengxiao" ? "Shengxiao" : "BaZi"})</h2>
@@ -161,30 +155,19 @@ export default function PrintEnergyProfile() {
                     <DomainScoreCard
                       key={domainResult.domainId}
                       domain={domainResult.domainId as Domain}
-                      score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
-        {view === "bazi" && energyProfile ? (
-          <>
-            <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
-              Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
-            </section>
-
-            {baziDomainScores ? (
-              <section>
-                <h2 className="text-2xl font-semibold mb-4">Domeinscores (indicatief)</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {DOMAINS.map((domain) => (
-                    <DomainScoreCard
-                      key={domain}
-                      domain={domain as Domain}
-                      score={baziDomainScores[domain as Domain]}
+                      score={{
+                        value: domainResult.score,
+                        min: domainResult.scoreMin,
+                        max: domainResult.scoreMax,
+                        spread: domainResult.spread,
+                        timeSensitive: energyScoring.time.timeSensitive,
+                      }}
                     />
                   ))}
                 </div>
               </section>
             ) : null}
 
-            {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
             <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}

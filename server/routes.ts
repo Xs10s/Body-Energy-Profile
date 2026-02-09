@@ -230,6 +230,8 @@ export async function registerRoutes(
         error: "Failed to generate narrative",
         detail: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  });
 
 
   app.post("/api/energy-scoring", async (req, res) => {

@@ -3,29 +3,6 @@ import type { EnergyProfileResult } from "../energyProfile";
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const elementRatio = (
-  elements: EnergyProfileResult["chinese_bazi"]["elements_visible"],
-  elementId: string
-) => elements[elementId]?.ratio ?? 0;
-
-const polarityRatio = (
-  polarity: EnergyProfileResult["chinese_bazi"]["polarity_visible"],
-  polarityId: string
-) => polarity[polarityId]?.ratio ?? 0;
-
-export function computeBaziDomainScores(result: EnergyProfileResult): Record<Domain, DomainScore> {
-  const elements = result.chinese_bazi.elements_visible;
-  const polarity = result.chinese_bazi.polarity_visible;
-  const dayMaster = result.chinese_bazi.day_master.element_id;
-
-  const water = elementRatio(elements, "water");
-  const wood = elementRatio(elements, "wood");
-  const fire = elementRatio(elements, "fire");
-  const earth = elementRatio(elements, "earth");
-  const metal = elementRatio(elements, "metal");
-
-  const yin = polarityRatio(polarity, "yin");
-  const yang = polarityRatio(polarity, "yang");
 /** Python calc_core_py uses element_01..05 and polarity_01/02; map to semantic names for scoring. */
 const ELEMENT_API_TO_NAME: Record<string, string> = {
   element_01: "wood",
@@ -34,6 +11,7 @@ const ELEMENT_API_TO_NAME: Record<string, string> = {
   element_04: "metal",
   element_05: "water",
 };
+
 const POLARITY_API_TO_NAME: Record<string, string> = {
   polarity_01: "yin",
   polarity_02: "yang",
