@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
-import { Download, Save, ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SummaryHeader } from "@/components/SummaryHeader";
@@ -16,53 +15,42 @@ import { BaZiSummaryHeader } from "@/components/BaZiSummaryHeader";
 import { EnergyProfilePanel } from "@/components/EnergyProfilePanel";
 import { useToast } from "@/hooks/use-toast";
 import { useNarrative } from "@/hooks/useNarrative";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { mergeNarrativeIntoProfile } from "@shared/llmNarratives";
-import type { BodyProfile, ProfileInput, Domain } from "@shared/schema";
-import type { BodyProfile, ProfileInput, Domain, ChineseMethod, EnergyScoringResult as UnifiedEnergyScoringResult } from "@shared/schema";
+import type { BodyProfile, ChineseMethod, Domain, EnergyScoringResult, ProfileInput } from "@shared/schema";
 import { DOMAINS } from "@shared/schema";
 import type { EnergyProfileResult } from "@shared/energyProfile";
 import { generateProfileByView, normalizeAstroView } from "@shared/profileBuilder";
 import type { AstroView } from "@shared/schema";
-import { normalizeVariantId, VARIANT_LABELS, VARIANT_TO_VIEW, VARIANT_TO_ZODIAC_MODE, VIEW_TO_VARIANT, type VariantId } from "@shared/variant";
-import { computeBaziDomainScores } from "@shared/scoring/baziDomainScoring";
+import {
+  normalizeVariantId,
+  VARIANT_LABELS,
+  VARIANT_TO_VIEW,
+  VARIANT_TO_ZODIAC_MODE,
+  VIEW_TO_VARIANT,
+  type VariantId,
+} from "@shared/variant";
+
+type WesternProfiles = {
+  sidereal: BodyProfile | null;
+  tropical: BodyProfile | null;
+};
 
 export default function Results() {
   const [, setLocation] = useLocation();
-  const [profile, setProfile] = useState<BodyProfile | null>(null);
-  const [energyProfile, setEnergyProfile] = useState<EnergyProfileResult | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [chartType, setChartType] = useState<ChartType>('diamond');
-  const [astroView, setAstroView] = useState<AstroView>("sidereal");
-  const [selectedVariantId, setSelectedVariantId] = useState<VariantId>("variant_01");
-  const [profileInput, setProfileInput] = useState<ProfileInput | null>(null);
-  const [chineseMethod, setChineseMethod] = useState<ChineseMethod>("bazi");
-  const [energyScoring, setEnergyScoring] = useState<UnifiedEnergyScoringResult | null>(null);
-  const [savedProfileId, setSavedProfileId] = useState<string | null>(null);
   const { toast } = useToast();
-  const { generateNarrative: fetchNarrative, narrative, isLoading: isNarrativeLoading } = useNarrative();
+  const { generateNarrative: fetchNarrative, narrative } = useNarrative();
 
-  const saveProfileMutation = useMutation({
-    mutationFn: async (profileData: BodyProfile) => {
-      const response = await apiRequest("POST", "/api/profiles", { profile: profileData });
-      return response.json();
-    },
-    onSuccess: (data: { id?: string }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/profiles"] });
-      setSavedProfileId(data?.id ?? null);
-      toast({
-        title: "Opgeslagen",
-        description: "Je profiel is succesvol opgeslagen."
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Fout",
-        description: "Kon profiel niet opslaan. Probeer opnieuw.",
-        variant: "destructive"
-      });
-    }
-  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [chartType, setChartType] = useState<ChartType>("diamond");
+  const [selectedVariantId, setSelectedVariantId] = useState<VariantId>("variant_01");
+  const [astroView, setAstroView] = useState<AstroView>("sidereal");
+  const [profileInput, setProfileInput] = useState<ProfileInput | null>(null);
+  const [westernProfiles, setWesternProfiles] = useState<WesternProfiles>({ sidereal: null, tropical: null });
+  const [energyProfile, setEnergyProfile] = useState<EnergyProfileResult | null>(null);
+  const [chineseMethod, setChineseMethod] = useState<ChineseMethod>("bazi");
+  const [energyScoring, setEnergyScoring] = useState<EnergyScoringResult | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem("profileInput");
@@ -73,266 +61,153 @@ export default function Results() {
 
     let cancelled = false;
 
-    async function loadProfile() {
-      if (!stored) return;
-      try {
-        const input: ProfileInput = JSON.parse(stored);
-        const storedVariantId = normalizeVariantId(localStorage.getItem("variantId"));
-        const normalizedView = normalizeAstroView(input);
-        const fallbackVariant = VIEW_TO_VARIANT[normalizedView];
-        const variantId = storedVariantId ?? fallbackVariant;
-        const view = VARIANT_TO_VIEW[variantId];
-        const storedChineseMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
-        const normalizedInput = { ...input, zodiacMode: VARIANT_TO_ZODIAC_MODE[variantId] };
+    async function generateWestern(input: ProfileInput, view: "sidereal" | "tropical") {
+      const res = await fetch("/api/profiles/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: { ...input, zodiacMode: view }, view }),
+        credentials: "include",
+      });
+      if (res.ok) return (await res.json()) as BodyProfile;
+      return generateProfileByView({ ...input, zodiacMode: view }, view);
+    }
 
-        if (view === "bazi") {
-          const res = await fetch("/api/energy-profile", {
+    async function loadAll() {
+      try {
+        const parsedInput = JSON.parse(stored) as ProfileInput;
+        const variantId = normalizeVariantId(localStorage.getItem("variantId")) ?? VIEW_TO_VARIANT[normalizeAstroView(parsedInput)];
+        const initialChineseMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
+
+        setProfileInput(parsedInput);
+        setChineseMethod(initialChineseMethod);
+        setSelectedVariantId(variantId);
+        setAstroView(VARIANT_TO_VIEW[variantId]);
+
+        const [siderealProfile, tropicalProfile, chineseProfileRes, chineseScoringRes] = await Promise.all([
+          generateWestern(parsedInput, "sidereal"),
+          generateWestern(parsedInput, "tropical"),
+          fetch("/api/energy-profile", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: normalizedInput }),
+            body: JSON.stringify({ input: parsedInput }),
             credentials: "include",
-          });
-          if (res.ok && !cancelled) {
-            const generatedEnergyProfile = await res.json();
-            localStorage.setItem("variantId", variantId);
-            setProfileInput(normalizedInput);
-            setAstroView(view);
-            setSelectedVariantId(variantId);
-            setEnergyProfile(generatedEnergyProfile);
-            setProfile(null);
-            setChineseMethod(storedChineseMethod);
-            const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: normalizedInput, selection: { system: "chinese", method: storedChineseMethod } }), credentials: "include" });
-            if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
-            return;
-          }
-          if (!res.ok && !cancelled) {
-            const errBody = await res.json().catch(() => ({}));
-            const detail = errBody.detail ?? errBody.error ?? "Onbekende fout";
-            throw new Error(detail);
-          }
-        } else {
-          // Prefer server generation (enables Gemini personalization)
-          try {
-            const res = await fetch("/api/profiles/generate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ input: normalizedInput, view }),
-              credentials: "include",
-            });
-            if (res.ok && !cancelled) {
-              const generatedProfile = await res.json();
-              localStorage.setItem("variantId", variantId);
-              setProfileInput(normalizedInput);
-              setAstroView(view);
-              setSelectedVariantId(variantId);
-              setChartType(view === "tropical" ? "wheel" : "diamond");
-              setProfile(generatedProfile);
-              setEnergyProfile(null);
-              return;
-            }
-          } catch {
-            // Fall through to client-side generation
-          }
-        }
+          }),
+          fetch("/api/energy-scoring", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ input: parsedInput, selection: { system: "chinese", method: initialChineseMethod } }),
+            credentials: "include",
+          }),
+        ]);
 
         if (cancelled) return;
-        if (view === "bazi") {
-          const fallbackEnergyProfileRes = await fetch("/api/energy-profile", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ input: normalizedInput }),
-            credentials: "include",
-          });
-          if (!fallbackEnergyProfileRes.ok) {
-            const errBody = await fallbackEnergyProfileRes.json().catch(() => ({}));
-            const detail = errBody.detail ?? errBody.error ?? "Failed to generate energy profile";
-            throw new Error(detail);
-          }
-          const generatedEnergyProfile = await fallbackEnergyProfileRes.json();
-          localStorage.setItem("variantId", variantId);
-          setProfileInput(normalizedInput);
-          setAstroView(view);
-          setSelectedVariantId(variantId);
-          setEnergyProfile(generatedEnergyProfile);
-          setProfile(null);
-          setChineseMethod(storedChineseMethod);
-          const scoringRes = await fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: normalizedInput, selection: { system: "chinese", method: storedChineseMethod } }), credentials: "include" });
-          if (scoringRes.ok) setEnergyScoring(await scoringRes.json());
-        } else {
-          const generatedProfile = generateProfileByView(normalizedInput, view);
-          localStorage.setItem("variantId", variantId);
-          setProfileInput(normalizedInput);
-          setAstroView(view);
-          setSelectedVariantId(variantId);
-          setChartType(view === "tropical" ? "wheel" : "diamond");
-          setProfile(generatedProfile);
-          setEnergyProfile(null);
-          setEnergyScoring(null);
-        }
+
+        setWesternProfiles({ sidereal: siderealProfile, tropical: tropicalProfile });
+        setEnergyProfile(chineseProfileRes.ok ? await chineseProfileRes.json() : null);
+        setEnergyScoring(chineseScoringRes.ok ? await chineseScoringRes.json() : null);
       } catch (error) {
-        console.error("Error generating profile:", error);
-        const message = error instanceof Error ? error.message : "Kon profiel niet genereren. Probeer opnieuw.";
-        toast({
-          title: "Fout",
-          description: message.length > 120 ? `${message.slice(0, 120)}…` : message,
-          variant: "destructive"
-        });
+        const message = error instanceof Error ? error.message : "Kon profielen niet laden.";
+        toast({ title: "Fout", description: message, variant: "destructive" });
         setLocation("/");
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     }
 
-    loadProfile();
-    return () => { cancelled = true; };
+    loadAll();
+    return () => {
+      cancelled = true;
+    };
   }, [setLocation, toast]);
 
-  const handleSave = () => {
-    if (profile) {
-      saveProfileMutation.mutate(profile);
-    }
-  };
-
-  const handleDownloadPDF = () => {
-    if (!savedProfileId) return;
-    const methodQuery = astroView === "bazi" ? `&chinese_method=${encodeURIComponent(chineseMethod)}` : "";
-    window.location.href = `/api/export/energy-profile.pdf?profile_id=${encodeURIComponent(
-      savedProfileId
-    )}&variant_id=${encodeURIComponent(selectedVariantId)}${methodQuery}`;
-  };
-
-  const handleViewChange = (nextVariantId: VariantId) => {
-    if (!profileInput) return;
-    const nextView = VARIANT_TO_VIEW[nextVariantId];
-    const nextZodiacMode = VARIANT_TO_ZODIAC_MODE[nextVariantId];
-    const updatedInput = { ...profileInput, zodiacMode: nextZodiacMode };
-    localStorage.setItem("profileInput", JSON.stringify({ ...updatedInput, zodiacMode: nextZodiacMode }));
-    localStorage.setItem("variantId", nextVariantId);
-    setProfileInput(updatedInput);
-    setAstroView(nextView);
-    setSelectedVariantId(nextVariantId);
-    if (nextView === "bazi") {
-      fetch("/api/energy-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input: updatedInput }),
-        credentials: "include",
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const errBody = await res.json().catch(() => ({}));
-            const detail = errBody.detail ?? errBody.error ?? "BaZi-profiel kon niet worden geladen.";
-            throw new Error(detail);
-          }
-          return res.json();
-        })
-        .then((data) => {
-          setEnergyProfile(data);
-      const nextMethod = (localStorage.getItem("chineseMethod") as ChineseMethod | null) ?? "bazi";
-      setChineseMethod(nextMethod);
-      Promise.all([
-        fetch("/api/energy-profile", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: updatedInput }),
-          credentials: "include",
-        }),
-        fetch("/api/energy-scoring", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ input: updatedInput, selection: { system: "chinese", method: nextMethod } }),
-          credentials: "include",
-        })
-      ])
-        .then(async ([profileRes, scoringRes]) => {
-          setEnergyProfile(profileRes.ok ? await profileRes.json() : null);
-          setEnergyScoring(scoringRes.ok ? await scoringRes.json() : null);
-          setProfile(null);
-        })
-        .catch((err) => {
-          setEnergyProfile(null);
-          const message = err instanceof Error ? err.message : "BaZi-profiel kon niet worden geladen.";
-          toast({
-            title: "Chinese (BaZi) niet beschikbaar",
-            description: message.length > 100 ? `${message.slice(0, 100)}…` : message,
-            variant: "destructive"
-          });
-          setEnergyScoring(null);
-        });
-      return;
-    }
-    setChartType(nextView === "tropical" ? "wheel" : "diamond");
-    setProfile(generateProfileByView(updatedInput, nextView));
-    setEnergyProfile(null);
-    setEnergyScoring(null);
-  };
-
-  const viewLabel = useMemo(() => VARIANT_LABELS[selectedVariantId], [selectedVariantId]);
-  const baziDomainScores = useMemo(() => (energyProfile ? computeBaziDomainScores(energyProfile) : null), [energyProfile]);
+  const activeProfile = astroView === "sidereal" ? westernProfiles.sidereal : astroView === "tropical" ? westernProfiles.tropical : null;
 
   const displayProfile = useMemo(() => {
-    if (!profile || !narrative) return profile;
-    return mergeNarrativeIntoProfile(profile, narrative);
-  }, [profile, narrative]);
+    if (!activeProfile || !narrative || astroView === "bazi") return activeProfile;
+    return mergeNarrativeIntoProfile(activeProfile, narrative);
+  }, [activeProfile, narrative, astroView]);
 
   useEffect(() => {
-    if (profile && astroView !== "bazi") {
-      fetchNarrative({ profile }).catch(() => {
-        // Fallback: keep existing deterministic text
-      });
-    }
-  }, [profile, astroView, fetchNarrative]);
+    if (!activeProfile || astroView === "bazi") return;
+    fetchNarrative({ profile: activeProfile }).catch(() => undefined);
+  }, [activeProfile, astroView, fetchNarrative]);
 
+  const handleViewChange = (nextVariantId: VariantId) => {
+    const nextView = VARIANT_TO_VIEW[nextVariantId];
+    setSelectedVariantId(nextVariantId);
+    setAstroView(nextView);
+    setChartType(nextView === "tropical" ? "wheel" : "diamond");
+    localStorage.setItem("variantId", nextVariantId);
+  };
+
+  const handleChineseMethodChange = async (method: ChineseMethod) => {
+    if (!profileInput) return;
+    setChineseMethod(method);
+    localStorage.setItem("chineseMethod", method);
+    const res = await fetch("/api/energy-scoring", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: profileInput, selection: { system: "chinese", method } }),
+      credentials: "include",
+    });
+    setEnergyScoring(res.ok ? await res.json() : null);
+  };
+
+  const handleSaveAsPdf = async () => {
+    if (!profileInput) return;
+    const baseProfile = westernProfiles.sidereal ?? westernProfiles.tropical;
+    if (!baseProfile) {
+      toast({ title: "Fout", description: "Geen profiel beschikbaar om op te slaan.", variant: "destructive" });
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const profileToSave: BodyProfile = {
+        ...baseProfile,
+        view: astroView,
+        viewLabelNL: VARIANT_LABELS[selectedVariantId],
+        input: { ...profileInput, zodiacMode: VARIANT_TO_ZODIAC_MODE[selectedVariantId] },
+      };
+
+      const saveRes = await apiRequest("POST", "/api/profiles", { profile: profileToSave });
+      const saved = await saveRes.json();
+      const profileId = saved?.id;
+      if (!profileId) throw new Error("Opslaan mislukt");
+
+      const methodQuery = astroView === "bazi" ? `&chinese_method=${encodeURIComponent(chineseMethod)}` : "";
+      window.location.href = `/api/export/energy-profile.pdf?profile_id=${encodeURIComponent(profileId)}&variant_id=${encodeURIComponent(selectedVariantId)}${methodQuery}`;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Opslaan/PDF export mislukt.";
+      toast({ title: "Fout", description: message, variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" data-testid="loader-generating" />
-          <p className="text-muted-foreground" data-testid="text-loading">Profiel wordt gegenereerd...</p>
-        </div>
+        <Loader2 className="h-8 w-8 animate-spin text-primary" data-testid="loader-generating" />
       </div>
     );
   }
 
-  if (!profile && !energyProfile) {
-    return null;
-  }
+  const viewLabel = VARIANT_LABELS[selectedVariantId];
 
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background z-50">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <Button 
-            variant="ghost" 
-            onClick={() => setLocation("/")}
-            data-testid="button-back"
-          >
+          <Button variant="ghost" onClick={() => setLocation("/")} data-testid="button-back">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Terug
           </Button>
 
           <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              onClick={handleDownloadPDF}
-              disabled={saveProfileMutation.isPending || !savedProfileId}
-              data-testid="button-download-pdf"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Download PDF</span>
-            </Button>
-            <Button 
-              onClick={handleSave}
-              disabled={saveProfileMutation.isPending || !profile}
-              data-testid="button-save-profile"
-            >
-              {saveProfileMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              <span className="hidden sm:inline">Opslaan</span>
+            <Button onClick={handleSaveAsPdf} disabled={isExporting} data-testid="button-save-pdf">
+              {isExporting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              <span className="hidden sm:inline">Opslaan als PDF</span>
             </Button>
             <ThemeToggle />
           </div>
@@ -343,199 +218,91 @@ export default function Results() {
         <section className="flex flex-col gap-3" data-testid="section-astro-view-toggle">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Astrologische variant</span>
-            <span className="text-sm font-medium" data-testid="text-active-view">
-              {viewLabel}
-            </span>
+            <span className="text-sm font-medium">{viewLabel}</span>
           </div>
           <div className="inline-flex rounded-md border border-border overflow-hidden">
-            <Button
-              type="button"
-              variant={selectedVariantId === "variant_01" ? "default" : "ghost"}
-              className="rounded-none"
-              aria-pressed={selectedVariantId === "variant_01"}
-              onClick={() => handleViewChange("variant_01")}
-              data-testid="button-view-sidereal"
-            >
+            <Button variant={selectedVariantId === "variant_01" ? "default" : "ghost"} className="rounded-none" onClick={() => handleViewChange("variant_01")}>
               {VARIANT_LABELS.variant_01}
             </Button>
-            <Button
-              type="button"
-              variant={selectedVariantId === "variant_02" ? "default" : "ghost"}
-              className="rounded-none"
-              aria-pressed={selectedVariantId === "variant_02"}
-              onClick={() => handleViewChange("variant_02")}
-              data-testid="button-view-tropical"
-            >
+            <Button variant={selectedVariantId === "variant_02" ? "default" : "ghost"} className="rounded-none" onClick={() => handleViewChange("variant_02")}>
               {VARIANT_LABELS.variant_02}
             </Button>
-            <Button
-              type="button"
-              variant={selectedVariantId === "variant_03" ? "default" : "ghost"}
-              className="rounded-none"
-              aria-pressed={selectedVariantId === "variant_03"}
-              onClick={() => handleViewChange("variant_03")}
-              data-testid="button-view-bazi"
-            >
+            <Button variant={selectedVariantId === "variant_03" ? "default" : "ghost"} className="rounded-none" onClick={() => handleViewChange("variant_03")}>
               {VARIANT_LABELS.variant_03}
             </Button>
           </div>
         </section>
 
-        {astroView !== "bazi" && profile ? (
+        {astroView !== "bazi" && displayProfile ? (
           <>
-            <SummaryHeader profile={displayProfile ?? profile} />
-
-            <ChakraProfileSection 
-              chakraProfiles={(displayProfile ?? profile).chakraProfiles}
-              timeUnknown={profile.derived.timeUnknown}
-            />
-
-            {isNarrativeLoading && (
-              <p className="text-sm text-muted-foreground" data-testid="text-narrative-loading">
-                Narratief wordt gepersonaliseerd...
-              </p>
-            )}
-
-            <HoroscopeSection 
-              profile={displayProfile ?? profile} 
-              chartType={chartType}
-              onChartTypeChange={setChartType}
-              lockChartType
-            />
+            <SummaryHeader profile={displayProfile} />
+            <HoroscopeSection profile={displayProfile} chartType={chartType} onChartTypeChange={setChartType} />
+            <ChakraProfileSection chakraProfiles={displayProfile.chakraProfiles} timeUnknown={displayProfile.derived.timeUnknown} />
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores">Domeinscores</h2>
+              <h2 className="text-2xl font-semibold mb-4">Domeinscores</h2>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {DOMAINS.map((domain) => (
-                  <DomainScoreCard 
-                    key={domain} 
-                    domain={domain as Domain} 
-                    score={(displayProfile ?? profile).domainScores[domain as Domain]} 
-                  />
+                  <DomainScoreCard key={domain} domain={domain as Domain} score={displayProfile.domainScores[domain as Domain]} />
                 ))}
               </div>
             </section>
 
             <section>
-              <h2 className="text-2xl font-semibold mb-4" data-testid="heading-profile">Jouw profiel</h2>
+              <h2 className="text-2xl font-semibold mb-4">Jouw profiel</h2>
               <div className="grid md:grid-cols-2 gap-4">
-                <ProfileSectionCard type="strengths" section={(displayProfile ?? profile).sections.strengths} />
-                <ProfileSectionCard type="weaknesses" section={(displayProfile ?? profile).sections.weaknesses} />
-                <ProfileSectionCard type="base" section={(displayProfile ?? profile).sections.base} />
-                <ProfileSectionCard type="nutrition" section={(displayProfile ?? profile).sections.nutrition} />
-                <ProfileSectionCard type="movement" section={(displayProfile ?? profile).sections.movement} />
-                <ProfileSectionCard type="strengthBuilding" section={(displayProfile ?? profile).sections.strengthBuilding} />
-                <ProfileSectionCard type="flexibility" section={(displayProfile ?? profile).sections.flexibility} />
-                <ProfileSectionCard type="functionality" section={(displayProfile ?? profile).sections.functionality} />
+                <ProfileSectionCard type="strengths" section={displayProfile.sections.strengths} />
+                <ProfileSectionCard type="weaknesses" section={displayProfile.sections.weaknesses} />
+                <ProfileSectionCard type="base" section={displayProfile.sections.base} />
+                <ProfileSectionCard type="nutrition" section={displayProfile.sections.nutrition} />
+                <ProfileSectionCard type="movement" section={displayProfile.sections.movement} />
+                <ProfileSectionCard type="strengthBuilding" section={displayProfile.sections.strengthBuilding} />
+                <ProfileSectionCard type="flexibility" section={displayProfile.sections.flexibility} />
+                <ProfileSectionCard type="functionality" section={displayProfile.sections.functionality} />
               </div>
             </section>
 
-            <MethodologyAccordion methodology={(displayProfile ?? profile).methodology} />
-
-            <DebugPanel debugInfo={profile.debugInfo} />
-
-            {import.meta.env.DEV && (
-              <section className="border rounded-lg p-4 bg-muted/40" data-testid="dev-astro-view-debug">
-                <h3 className="text-sm font-semibold mb-2">Dev-check: kijkwijze & tags</h3>
-                <p className="text-xs text-muted-foreground">
-                  Actieve kijkwijze: <span className="font-medium">{viewLabel}</span>
-                </p>
-                <div className="mt-3 space-y-2 text-xs">
-                  {(displayProfile ?? profile).chakraProfiles.map((chakra) => {
-                    const tags = Array.from(
-                      new Set(chakra.signals.flatMap((signal) => signal.tags || []))
-                    );
-                    const topTags = tags.slice(0, 3);
-                    const hasNakshatra = tags.some((tag) => tag.startsWith("nakshatra:"));
-                    return (
-                      <div key={chakra.domain} className="flex flex-wrap gap-2">
-                        <span className="font-medium">{chakra.labelNL}:</span>
-                        <span>Tags: {topTags.join(", ") || "geen"}</span>
-                        <span className={hasNakshatra ? "text-amber-600" : "text-emerald-600"}>
-                          Nakshatra: {hasNakshatra ? "ja" : "nee"}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            )}
-
-            <DisclaimerBox disclaimer={(displayProfile ?? profile).disclaimer} />
+            <MethodologyAccordion methodology={displayProfile.methodology} />
+            <DebugPanel debugInfo={displayProfile.debugInfo} />
+            <DisclaimerBox disclaimer={displayProfile.disclaimer} />
           </>
         ) : null}
 
-        {astroView === "bazi" && (energyProfile || energyScoring) ? (
+        {astroView === "bazi" && energyProfile ? (
           <>
+            {profileInput ? <BaZiSummaryHeader input={profileInput} localDatetimeResolved={energyProfile.birth_local_datetime_resolved} /> : null}
+
             <section className="flex items-center gap-2" data-testid="section-chinese-method-toggle">
               <span className="text-sm text-muted-foreground">Chinese methode</span>
-              <Button size="sm" variant={chineseMethod === "bazi" ? "default" : "outline"} onClick={() => {
-                if (!profileInput) return;
-                localStorage.setItem("chineseMethod", "bazi");
-                setChineseMethod("bazi");
-                fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: profileInput, selection: { system: "chinese", method: "bazi" } }), credentials: "include" })
-                  .then((r) => r.ok ? r.json() : null)
-                  .then((data) => setEnergyScoring(data));
-              }}>BaZi</Button>
-              <Button size="sm" variant={chineseMethod === "shengxiao" ? "default" : "outline"} onClick={() => {
-                if (!profileInput) return;
-                localStorage.setItem("chineseMethod", "shengxiao");
-                setChineseMethod("shengxiao");
-                fetch("/api/energy-scoring", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: profileInput, selection: { system: "chinese", method: "shengxiao" } }), credentials: "include" })
-                  .then((r) => r.ok ? r.json() : null)
-                  .then((data) => setEnergyScoring(data));
-              }}>Shengxiao</Button>
+              <Button size="sm" variant={chineseMethod === "bazi" ? "default" : "outline"} onClick={() => handleChineseMethodChange("bazi")}>BaZi</Button>
+              <Button size="sm" variant={chineseMethod === "shengxiao" ? "default" : "outline"} onClick={() => handleChineseMethodChange("shengxiao")}>Shengxiao</Button>
             </section>
 
             {energyScoring ? (
               <section>
-                <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores-bazi">Domeinscores ({energyScoring.method === "shengxiao" ? "Shengxiao" : "BaZi"})</h2>
+                <h2 className="text-2xl font-semibold mb-4">Domeinscores ({energyScoring.method === "shengxiao" ? "Shengxiao" : "BaZi"})</h2>
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {energyScoring.domains.map((domainResult) => (
                     <DomainScoreCard
                       key={domainResult.domainId}
                       domain={domainResult.domainId as Domain}
-                      score={{ value: domainResult.score, min: domainResult.scoreMin, max: domainResult.scoreMax, spread: domainResult.spread, timeSensitive: energyScoring.time.timeSensitive }}
-        {astroView === "bazi" && energyProfile && profileInput ? (
-          <>
-            <BaZiSummaryHeader
-              input={profileInput}
-              localDatetimeResolved={energyProfile.birth_local_datetime_resolved}
-            />
-
-            <section className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground" data-testid="bazi-scoring-note">
-              Chinese (BaZi) gebruikt een andere berekeningsmethode dan Sidereal/Tropical.
-              Daarom tonen we hier indicatieve domeinscores op basis van element- en polariteitsbalans.
-            </section>
-
-            {baziDomainScores ? (
-              <section>
-                <h2 className="text-2xl font-semibold mb-4" data-testid="heading-domain-scores-bazi">Domeinscores (indicatief)</h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {DOMAINS.map((domain) => (
-                    <DomainScoreCard
-                      key={domain}
-                      domain={domain as Domain}
-                      score={baziDomainScores[domain as Domain]}
+                      score={{
+                        value: domainResult.score,
+                        min: domainResult.scoreMin,
+                        max: domainResult.scoreMax,
+                        spread: domainResult.spread,
+                        timeSensitive: energyScoring.time.timeSensitive,
+                      }}
                     />
                   ))}
                 </div>
               </section>
             ) : null}
 
-            {chineseMethod === "bazi" && energyProfile ? <EnergyProfilePanel result={energyProfile} /> : null}
             <EnergyProfilePanel result={energyProfile} />
           </>
         ) : null}
       </main>
-
-      <footer className="border-t py-6 mt-8">
-        <div className="max-w-5xl mx-auto px-4 text-center text-xs text-muted-foreground">
-          <p data-testid="text-footer-disclaimer">
-            Dit is geen medische diagnose. Raadpleeg een professional voor gezondheidsadvies.
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

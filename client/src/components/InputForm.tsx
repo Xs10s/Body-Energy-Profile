@@ -10,8 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { profileInputSchema, COUNTRIES, TIMEZONES, ZODIAC_MODES, ZODIAC_MODE_LABELS, type ProfileInput, type GeocodeResult, type ZodiacMode } from "@shared/schema";
-import { Star } from "lucide-react";
+import { profileInputSchema, COUNTRIES, TIMEZONES, type ProfileInput, type GeocodeResult } from "@shared/schema";
 
 interface InputFormProps {
   onSubmit: (data: ProfileInput) => void;
@@ -36,7 +35,7 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
       timezone: "Europe/Amsterdam",
       latitude: null,
       longitude: null,
-      zodiacMode: "sidereal" as ZodiacMode
+      zodiacMode: "sidereal"
     }
   });
 
@@ -45,10 +44,15 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
   const handleSubmit = async (data: ProfileInput) => {
     setIsGeocoding(true);
     setGeocodeError(null);
+
+    const normalizedData: ProfileInput = {
+      ...data,
+      timeUnknown: data.timeUnknown || !data.birthTime,
+    };
     
     try {
       const response = await fetch(
-        `/api/geocode?place=${encodeURIComponent(data.birthPlace)}&country=${encodeURIComponent(data.country)}`
+        `/api/geocode?place=${encodeURIComponent(normalizedData.birthPlace)}&country=${encodeURIComponent(normalizedData.country)}`
       );
       
       if (response.ok) {
@@ -56,20 +60,20 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
         if (body.found === true && body.lat != null && body.lon != null) {
           const result = body as GeocodeResult;
           setGeocodeResult(result);
-          data.latitude = result.lat;
-          data.longitude = result.lon;
-          data.placeId = result.placeId;
+          normalizedData.latitude = result.lat;
+          normalizedData.longitude = result.lon;
+          normalizedData.placeId = result.placeId;
           setGeocodeError(null);
         } else {
           setGeocodeResult(null);
-          if (!data.latitude || !data.longitude) {
+          if (!normalizedData.latitude || !normalizedData.longitude) {
             setGeocodeError("Locatie niet gevonden. Profiel wordt toch gegenereerd (coördinaten optioneel).");
             setShowAdvanced(true);
           }
         }
       } else {
         setGeocodeResult(null);
-        if (!data.latitude || !data.longitude) {
+        if (!normalizedData.latitude || !normalizedData.longitude) {
           setGeocodeError("Geocodering mislukt. Profiel wordt toch gegenereerd.");
           setShowAdvanced(true);
         }
@@ -77,14 +81,14 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
     } catch (error) {
       console.error("Geocode error:", error);
       setGeocodeResult(null);
-      if (!data.latitude || !data.longitude) {
+      if (!normalizedData.latitude || !normalizedData.longitude) {
         setGeocodeError("Geocodering mislukt. Profiel wordt toch gegenereerd.");
         setShowAdvanced(true);
       }
     }
 
     setIsGeocoding(false);
-    onSubmit(data);
+    onSubmit(normalizedData);
   };
 
   const fillExample = () => {
@@ -108,7 +112,7 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
           Body Energy Profile
         </CardTitle>
         <CardDescription className="text-base mt-2">
-          Ontdek je persoonlijke lichaamsenergiepatroon gebaseerd op Jyotish (Vedische astrologie)
+          Vul geboortedatum, geboortetijd (of “ik weet het niet”) en geboorteplaats in om je westerse, jyotische en Chinese energieprofiel te berekenen.
         </CardDescription>
       </CardHeader>
 
@@ -292,37 +296,6 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
                     </SelectContent>
                   </Select>
                   <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="zodiacMode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2">
-                    <Star className="h-4 w-4 text-muted-foreground" />
-                    Astrologisch systeem
-                  </FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-zodiac-mode">
-                        <SelectValue placeholder="Selecteer systeem" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {ZODIAC_MODES.map((mode) => (
-                        <SelectItem key={mode} value={mode}>
-                          {ZODIAC_MODE_LABELS[mode]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Sidereaal: gebaseerd op sterrenbeelden • Tropisch: gebaseerd op seizoenen
-                  </p>
                 </FormItem>
               )}
             />
