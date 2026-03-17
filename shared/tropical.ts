@@ -88,6 +88,16 @@ const ZODIAC_SIGNS: ZodiacSign[] = [
   "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"
 ];
 
+// Default aspect orbs (degrees), aligned with Astro's DEFAULT_ORBS:
+// conjunction/opposition: 10°, trine/square: 8°, sextile: 6°.
+const ASPECT_ORBS: Record<AspectType, number> = {
+  conjunction: 10,
+  opposition: 10,
+  trine: 8,
+  square: 8,
+  sextile: 6
+};
+
 export function buildTropicalChartFeatures(
   input: BirthInput,
   opts: TropicalBuildOptions = {}
@@ -226,7 +236,8 @@ function computeMajorAspects(
       const d = angularDistance(planets[a].lon, planets[b].lon);
       for (const asp of MAJOR_ASPECTS) {
         const orb = Math.abs(d - asp.angle);
-        if (orb <= 8) {
+        const maxOrb = ASPECT_ORBS[asp.type];
+        if (orb <= maxOrb) {
           out.push({ a, b, type: asp.type, orbDeg: orb });
           break;
         }
