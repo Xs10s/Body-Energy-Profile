@@ -1,0 +1,10 @@
+{
+  "name": "body-energy-profile-rea-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "analyze": "node run.mjs analyze",
+    "mcp": "node run.mjs mcp",
+    "test": "node --test run.test.mjs"
+  }
+}
